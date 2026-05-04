@@ -1,5 +1,6 @@
 import * as fb from './firebase-service.js';
 import { SimulationEngine } from './simulation-engine.js';
+import { setupLayout } from '../layout.js';
 
 // --- STATE MANAGEMENT ---
 let currentTab = 'calendario';
@@ -58,21 +59,17 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.classList.add('hide-execute');
       }
 
-      initApp();
+      initApp(role);
     } else {
       window.location.href = '/login';
     }
   });
 });
 
-async function initApp() {
-  document.getElementById('auth-guard').style.display = 'none';
-  document.getElementById('app').classList.remove('hidden');
-  
-  // Set User Info
-  const name = currentUser.displayName || currentUser.email.split('@')[0];
-  document.getElementById('user-display-name').textContent = name;
-  document.getElementById('user-avatar').textContent = name.charAt(0).toUpperCase();
+async function initApp(role) {
+  setupLayout(currentUser, role, 'ensalamento', () => {
+    fb.auth.signOut();
+  });
 
   setupEventListeners();
   await loadAllData();
@@ -105,8 +102,6 @@ function setupEventListeners() {
     });
   });
 
-  // Logout
-  document.getElementById('logout-btn').addEventListener('click', () => fb.auth.signOut());
 
   // Modal Close Buttons
   document.querySelectorAll('.modal-close').forEach(btn => {

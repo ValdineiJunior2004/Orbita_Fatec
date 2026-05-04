@@ -15,7 +15,7 @@ const loginBtnText  = document.getElementById('login-btn-text');
 
 // Se já estiver logado, vai direto pro Hub
 onAuthStateChanged(auth, (user) => {
-  if (user) window.location.href = '/';
+  if (user) window.location.href = '/meu-espaco/index.html';
 });
 
 loginForm.addEventListener('submit', async (e) => {
@@ -25,7 +25,7 @@ loginForm.addEventListener('submit', async (e) => {
 
   try {
     await signInWithEmailAndPassword(auth, loginEmail.value.trim(), loginPassword.value);
-    window.location.href = '/';
+    window.location.href = '/meu-espaco/index.html';
   } catch (err) {
     console.error("Login Error:", err);
     loginError.style.display = 'block';

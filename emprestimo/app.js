@@ -4,12 +4,13 @@
 // ================================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
 import { getAnalytics }  from "https://www.gstatic.com/firebasejs/10.9.0/firebase-analytics.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 import {
   getFirestore, collection, doc, setDoc, getDocs, onSnapshot, getDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
 import { firebaseConfig } from "../firebase-config.js";
+import { setupLayout } from "../layout.js";
 
 const fbApp  = initializeApp(firebaseConfig);
 const analytics = getAnalytics(fbApp);
@@ -129,6 +130,12 @@ onAuthStateChanged(auth, async (user) => {
   // Esconde o bloqueio se estiver logado
   const guard = document.getElementById('auth-guard');
   if (guard) guard.classList.add('hidden');
+  
+  setupLayout(user, role, 'emprestimo', async () => {
+    await signOut(auth);
+    window.location.href = '/login.html';
+  });
+
   await loadNotebooks();
 
   if (isDashboard)  initDashboard();
@@ -353,10 +360,10 @@ function renderGrid(list) {
         <span style="font-weight:700; color:var(--purple-bright)">👤 ${esc(n.responsavel || '---')}</span>
       </div>
 
-      <div class="card-actions">
-        <a href="movimentar?id=${n.id}" class="btn btn-secondary action-execute">Movimentar</a>
-        <button class="btn btn-secondary btn-qr action-execute" data-id="${n.id}" style="opacity:0.4; font-size:0.75rem">GERAR QR</button>
-      </div>
+        <div class="card-actions">
+          <a href="movimentar.html?id=${n.id}" class="btn btn-secondary action-execute">Movimentar</a>
+          <button class="btn btn-secondary btn-qr action-execute" data-id="${n.id}" style="opacity:0.4; font-size:0.75rem">GERAR QR</button>
+        </div>
     `;
     grid.appendChild(card);
   });
@@ -368,7 +375,7 @@ function abrirQR(id) {
   const container = document.getElementById('qr-code-canvas');
   container.innerHTML = '';
   const base = window.location.href.split('emprestimo/')[0];
-  const url  = `${base}emprestimo/movimentar?id=${id}`;
+  const url  = `${base}emprestimo/movimentar.html?id=${id}`;
   new QRCode(container, { text:url, width:200, height:200, correctLevel: QRCode.CorrectLevel.H });
   document.getElementById('qr-modal').classList.add('active');
 }

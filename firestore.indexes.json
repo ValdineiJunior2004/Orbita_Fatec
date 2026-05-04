@@ -1,0 +1,19 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "registros_carga_horaria",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "funcionarioId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lancadoEm",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

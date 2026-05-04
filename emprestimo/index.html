@@ -1,171 +1,167 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Empréstimo · Órbita - FatecIVP</title>
   <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
-  <link rel="stylesheet" href="../hub.css">
+  <link rel="stylesheet" href="../layout.css">
+  <link rel="stylesheet" href="../layout.css">
   <link rel="stylesheet" href="emprestimo.css">
 </head>
+
 <body>
 
-  <div id="auth-guard" class="auth-guard hidden">
-    <div class="auth-guard-card">
-      <div class="guard-icon">🚫</div>
-      <h2>Acesso Restrito</h2>
-      <p>Autenticando...</p>
-    </div>
+  <!-- Novo Auth Guard Padrão -->
+  <div id="auth-guard" class="layout-auth-guard">
+    <div class="layout-spinner"></div>
+    <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
   </div>
 
-  <!-- Header IDÊNTICO AO HUB -->
-  <header class="hub-header">
-    <div class="hub-header-inner">
-      <div class="header-left-group">
-        <a href="../" class="back-link" title="Voltar ao Hub">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-        </a>
-        <div class="hub-brand">
-          <div class="orbit-container">
-            <div class="orbit-center">F</div>
-            <div class="orbit-planet"></div>
+  <div id="app" class="layout-wrapper hidden">
+    <!-- Sidebar injetada pelo layout.js -->
+
+    <div class="layout-main">
+      <!-- Header injetado pelo layout.js -->
+
+      <div class="layout-content">
+
+        <main id="dashboard-view" class="mod-main hidden">
+          <!-- Status Summary -->
+          <div class="status-summary">
+            <div class="stat-item" style="border-left-color: var(--purple-bright)">
+              <span class="stat-val" id="stat-total">0</span>
+              <span class="stat-lbl">Total</span>
+            </div>
+            <div class="stat-item" style="border-left-color: var(--c-guardado)">
+              <span class="stat-val" id="stat-guardado">0</span>
+              <span class="stat-lbl">Disponíveis</span>
+            </div>
+            <div class="stat-item" style="border-left-color: var(--c-emprestado)">
+              <span class="stat-val" id="stat-emprestado">0</span>
+              <span class="stat-lbl">Emprestados</span>
+            </div>
+            <div class="stat-item" style="border-left-color: var(--c-cedido)">
+              <span class="stat-val" id="stat-cedido">0</span>
+              <span class="stat-lbl">Cedidos</span>
+            </div>
+            <div class="stat-item" style="border-left-color: var(--c-reservado)">
+              <span class="stat-val" id="stat-reservado">0</span>
+              <span class="stat-lbl">Reservados</span>
+            </div>
+
           </div>
-          <span class="hub-logo">
-            <span class="logo-orbita">ÓRBITA</span>
-            <span class="logo-fatec">FATEC</span>
-          </span>
-          <span class="mod-indicator">/ Empréstimo</span>
-        </div>
-      </div>
 
-      <div class="hub-user-area">
-        <span class="role-badge" id="role-badge">ADMINISTRADOR</span>
-        <div class="hub-user-info">
-          <div class="user-avatar" id="header-avatar">A</div>
-          <span class="user-name" id="user-name-display">admti</span>
+          <!-- Toolbar e Filtros -->
+          <div class="toolbar-container">
+            <div class="toolbar-top">
+              <div class="search-box">
+                <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input type="text" id="search-input" class="search-input" placeholder="Buscar notebook (ex: Not_Med01)">
+              </div>
+            </div>
+
+            <div class="filters-row">
+              <div class="filter-group">
+                <label>Status</label>
+                <select id="filter-status">
+                  <option>Todos</option>
+                  <option value="guardado">Disponível</option>
+                  <option value="emprestado">Emprestado</option>
+                  <option value="reservado">Reservado</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label>Local/Sala</label>
+                <select id="filter-sala">
+                  <option>Todos</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label>Origem</label>
+                <select id="filter-local">
+                  <option>Todos</option>
+                  <option>T.I.</option>
+                  <option>Carrinho</option>
+                </select>
+              </div>
+              <div class="grid-info" id="grid-count">0 itens</div>
+            </div>
+          </div>
+
+          <div id="notebook-grid" class="notebook-grid">
+            <!-- Cards -->
+          </div>
+        </main>
+
+        <!-- Modais -->
+        <div id="modal-reserva" class="modal-overlay">
+          <div class="modal-box">
+            <h3>Reservar</h3>
+            <p id="reserva-subtitle" style="color:var(--text-muted); margin-bottom:1.5rem; font-size:0.9rem;"></p>
+            <form id="form-reserva">
+              <input type="hidden" id="reserva-notebook-id">
+              <div style="margin:1rem 0">
+                <label class="stat-lbl">Data</label>
+                <input type="date" id="reserva-dia" required
+                  style="width:100%; padding:0.8rem; background:#05040a; border:1px solid var(--border); color:white; border-radius:8px">
+              </div>
+              <div style="margin:1rem 0">
+                <label class="stat-lbl">Motivo</label>
+                <input type="text" id="reserva-motivo" placeholder="Professor / Sala" required
+                  style="width:100%; padding:0.8rem; background:#05040a; border:1px solid var(--border); color:white; border-radius:8px">
+              </div>
+              <div style="display:flex; gap:1rem">
+                <button type="button" class="btn btn-secondary" onclick="fecharModalReserva()"
+                  style="flex:1">Cancelar</button>
+                <button type="submit" class="btn btn-primary" style="flex:1">Confirmar</button>
+              </div>
+            </form>
+          </div>
         </div>
-        <button class="logout-btn" onclick="window.location.href='../'">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        </button>
+
+        <div id="qr-modal" class="modal-overlay">
+          <div class="modal-box" style="text-align:center">
+            <div class="printable-qr"
+              style="background:white; padding:1.5rem; border-radius:12px; margin:0 auto 1.5rem; display:inline-block; border:1px solid #eee;">
+              <div id="qr-code-canvas"></div>
+              <div id="qr-label-name"
+                style="color:black; font-weight:900; font-size:1.2rem; margin-top:0.5rem; font-family:'Outfit',sans-serif;">
+              </div>
+            </div>
+            <div class="modal-actions" style="display:flex; flex-direction:column; gap:0.5rem">
+              <div style="display:flex; gap:0.5rem">
+                <button id="btn-imprimir-qr" class="btn btn-secondary" style="flex:1">Imprimir</button>
+                <button id="btn-baixar-qr" class="btn btn-primary" style="flex:1">Baixar</button>
+              </div>
+              <button class="btn btn-secondary" onclick="fecharQR()"
+                style="width:100%; border:none; background:none; opacity:0.6;">Fechar</button>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
-  </header>
 
-  <main id="dashboard-view" class="mod-main hidden">
-    <!-- Status Summary -->
-    <div class="status-summary">
-      <div class="stat-item" style="border-left-color: var(--c-guardado)">
-        <span class="stat-val" id="stat-guardado">0</span>
-        <span class="stat-lbl">Disponíveis</span>
-      </div>
-      <div class="stat-item" style="border-left-color: var(--c-emprestado)">
-        <span class="stat-val" id="stat-emprestado">0</span>
-        <span class="stat-lbl">Emprestados</span>
-      </div>
-      <div class="stat-item" style="border-left-color: var(--c-cedido)">
-        <span class="stat-val" id="stat-cedido">0</span>
-        <span class="stat-lbl">Cedidos</span>
-      </div>
-      <div class="stat-item" style="border-left-color: var(--c-reservado)">
-        <span class="stat-val" id="stat-reservado">0</span>
-        <span class="stat-lbl">Reservados</span>
-      </div>
-      <div class="stat-item" style="border-left-color: var(--purple-bright)">
-        <span class="stat-val" id="stat-total">0</span>
-        <span class="stat-lbl">Total</span>
+    <div id="scanner-modal" class="modal-overlay">
+      <div class="modal-box">
+        <h3>Escanear QR</h3>
+        <div id="reader" style="width:100%"></div>
+        <button class="btn btn-secondary" onclick="fecharScanner()" style="width:100%; margin-top:1rem">Fechar</button>
       </div>
     </div>
 
-    <!-- Toolbar e Filtros -->
-    <div class="toolbar-container">
-      <div class="toolbar-top">
-        <div class="search-box">
-          <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="search-input" class="search-input" placeholder="Buscar notebook (ex: Not_Med01)">
-        </div>
-      </div>
-
-      <div class="filters-row">
-        <div class="filter-group">
-          <label>Status</label>
-          <select id="filter-status">
-            <option>Todos</option>
-            <option value="guardado">Disponível</option>
-            <option value="emprestado">Emprestado</option>
-            <option value="reservado">Reservado</option>
-          </select>
-        </div>
-        <div class="filter-group">
-          <label>Local/Sala</label>
-          <select id="filter-sala">
-            <option>Todos</option>
-          </select>
-        </div>
-        <div class="filter-group">
-          <label>Origem</label>
-          <select id="filter-local">
-            <option>Todos</option>
-            <option>T.I.</option>
-            <option>Carrinho</option>
-          </select>
-        </div>
-        <div class="grid-info" id="grid-count">0 itens</div>
-      </div>
-    </div>
-
-    <div id="notebook-grid" class="notebook-grid">
-      <!-- Cards -->
-    </div>
-  </main>
-
-  <!-- Modais -->
-  <div id="modal-reserva" class="modal-overlay">
-    <div class="modal-box">
-      <h3>Reservar</h3>
-      <p id="reserva-subtitle" style="color:var(--text-muted); margin-bottom:1.5rem; font-size:0.9rem;"></p>
-      <form id="form-reserva">
-        <input type="hidden" id="reserva-notebook-id">
-        <div style="margin:1rem 0">
-          <label class="stat-lbl">Data</label>
-          <input type="date" id="reserva-dia" required style="width:100%; padding:0.8rem; background:#05040a; border:1px solid var(--border); color:white; border-radius:8px">
-        </div>
-        <div style="margin:1rem 0">
-          <label class="stat-lbl">Motivo</label>
-          <input type="text" id="reserva-motivo" placeholder="Professor / Sala" required style="width:100%; padding:0.8rem; background:#05040a; border:1px solid var(--border); color:white; border-radius:8px">
-        </div>
-        <div style="display:flex; gap:1rem">
-          <button type="button" class="btn btn-secondary" onclick="fecharModalReserva()" style="flex:1">Cancelar</button>
-          <button type="submit" class="btn btn-primary" style="flex:1">Confirmar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div id="qr-modal" class="modal-overlay">
-    <div class="modal-box" style="text-align:center">
-      <div class="printable-qr" style="background:white; padding:1.5rem; border-radius:12px; margin:0 auto 1.5rem; display:inline-block; border:1px solid #eee;">
-        <div id="qr-code-canvas"></div>
-        <div id="qr-label-name" style="color:black; font-weight:900; font-size:1.2rem; margin-top:0.5rem; font-family:'Outfit',sans-serif;"></div>
-      </div>
-      <div class="modal-actions" style="display:flex; flex-direction:column; gap:0.5rem">
-        <div style="display:flex; gap:0.5rem">
-          <button id="btn-imprimir-qr" class="btn btn-secondary" style="flex:1">Imprimir</button>
-          <button id="btn-baixar-qr" class="btn btn-primary" style="flex:1">Baixar</button>
-        </div>
-        <button class="btn btn-secondary" onclick="fecharQR()" style="width:100%; border:none; background:none; opacity:0.6;">Fechar</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="scanner-modal" class="modal-overlay">
-    <div class="modal-box">
-      <h3>Escanear QR</h3>
-      <div id="reader" style="width:100%"></div>
-      <button class="btn btn-secondary" onclick="fecharScanner()" style="width:100%; margin-top:1rem">Fechar</button>
-    </div>
-  </div>
+  </div> <!-- Fim layout-content -->
+  </div> <!-- Fim layout-main -->
+  </div> <!-- Fim layout-wrapper -->
 
   <script type="module" src="app.js"></script>
 </body>
+
 </html>

@@ -4,66 +4,44 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Usuários · Órbita - FatecIVP</title>
-  <link rel="stylesheet" href="../hub.css">
+  <link rel="stylesheet" href="../layout.css">
+  <link rel="stylesheet" href="../layout.css">
   <link rel="stylesheet" href="usuarios.css">
 </head>
 <body>
   <div class="particles"></div>
 
-  <!-- Auth Guard -->
-  <div id="auth-guard" class="auth-guard hidden">
-    <div class="auth-guard-card">
-      <div class="guard-icon">🚫</div>
-      <h2>Acesso Negado</h2>
-      <p>Este módulo é exclusivo para Administradores.</p>
-      <a href="../" class="btn btn-primary">Voltar ao Hub</a>
-    </div>
+  <!-- Novo Auth Guard Padrão -->
+  <div id="auth-guard" class="layout-auth-guard">
+    <div class="layout-spinner"></div>
+    <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
   </div>
 
-  <!-- Header -->
-  <header class="hub-header">
-    <div class="hub-header-inner">
-      <div class="header-left-group">
-        <a href="../" class="back-link" title="Voltar ao Hub">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-        </a>
-        <div class="hub-brand">
-          <div class="orbit-container">
-            <div class="orbit-center">F</div>
-            <div class="orbit-planet"></div>
-          </div>
-          <span class="hub-logo">
-            <span class="logo-orbita">ÓRBITA</span>
-            <span class="logo-fatec">FATEC</span>
-          </span>
-          <span class="mod-indicator">/ Usuários</span>
-        </div>
-      </div>
-
-      <div class="hub-user-area">
-        <span class="role-badge" id="role-badge">ADMINISTRADOR</span>
-        <div class="hub-user-info">
-          <div class="user-avatar" id="header-avatar">A</div>
-          <span class="user-name" id="user-display-name">admti</span>
-        </div>
-        <button id="logout-btn" class="logout-btn" title="Sair">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        </button>
-      </div>
-    </div>
-  </header>
+  <div id="app" class="layout-wrapper hidden">
+    <!-- Sidebar injetada pelo layout.js -->
+    
+    <div class="layout-main">
+      <!-- Header injetado pelo layout.js -->
+      
+      <div class="layout-content">
 
   <!-- Main -->
   <main class="mod-main hidden" id="main-content">
 
-    <div class="users-layout">
-      <!-- MAIN: Lista de Usuários -->
+    <div class="tabs-nav" id="mod-tabs-nav">
+      <button class="tab-btn active" data-tab="usuarios">Usuários</button>
+      <button class="tab-btn" data-tab="cargos">Gerenciar Acessos</button>
+      <button class="tab-btn" data-tab="lista-cargos">Cargos</button>
+    </div>
+
+    <!-- TAB: Lista de Usuários -->
+    <div id="tab-usuarios" class="tab-content active">
       <div class="users-main">
         <div class="users-header">
           <div class="header-info">
             <div style="display:flex; align-items:center; gap:0.75rem">
               <div class="icon-glow">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-orange)" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               </div>
               <h2 class="page-title">Usuários do Sistema</h2>
             </div>
@@ -84,33 +62,73 @@
           <div class="loading-users">Carregando usuários...</div>
         </div>
       </div>
+    </div>
 
-      <!-- SIDEBAR: Permissões Globais -->
-      <aside class="permissions-sidebar">
-        <div class="sidebar-header">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          <h3>Acessos por Cargo</h3>
+    <!-- TAB: Permissões Globais -->
+    <div id="tab-cargos" class="tab-content" style="display: none;">
+      <div class="permissions-container">
+        <div class="sidebar-header" style="margin-bottom: 1rem;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-orange)" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <h2 class="page-title">Gerenciar Acessos</h2>
         </div>
-        <p class="sidebar-desc">Defina o que cada nível de acesso pode visualizar ou executar globalmente.</p>
+        <p class="sidebar-desc" style="font-size: 1rem; margin-bottom: 2rem;">Defina o que cada nível de acesso pode visualizar ou executar globalmente em cada módulo.</p>
         
-        <div class="role-tabs" id="role-tabs">
-          <button class="role-tab active" data-role="adm_l2">ADM N2</button>
-          <button class="role-tab" data-role="ti">TI</button>
-          <button class="role-tab" data-role="visitante">Visitante</button>
+        <div class="search-bar" style="margin-bottom: 2rem;">
+          <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <select id="role-select" class="form-input" style="padding-left: 3rem; appearance: none; cursor: pointer; height: 50px;">
+            <option value="adm_l2">ADM N2 - Setor/Chefia</option>
+            <option value="ti">TI - Suporte</option>
+            <option value="visitante">Visitante - Consulta</option>
+            <option value="rh">RH - Recursos Humanos</option>
+          </select>
         </div>
 
-        <div id="global-permissions-grid" class="module-permissions-grid">
-          <!-- Gerado dinamicamente via JS -->
+        <div id="global-permissions-grid-wrapper" style="background: var(--bg); padding: 2rem; border-radius: 20px; border: 1px solid var(--border-color); margin-bottom: 2rem;">
+          <div id="global-permissions-grid" class="module-permissions-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
+            <!-- Gerado dinamicamente via JS -->
+          </div>
         </div>
 
-        <button class="btn btn-primary action-execute" id="btn-save-global-perms" style="margin-top:1.5rem; width:100%">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          Salvar Configurações
-        </button>
-      </aside>
+        <div style="display: flex; justify-content: flex-end;">
+          <button class="btn btn-primary action-execute" id="btn-save-global-perms" style="padding: 1rem 2rem;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            Salvar Configurações do Cargo
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Lista de Cargos -->
+    <div id="tab-lista-cargos" class="tab-content" style="display: none;">
+      <div class="roles-container">
+        <div class="roles-header">
+          <div style="display:flex; align-items:center; gap:0.75rem">
+            <div class="icon-glow">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-orange)" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <h2 class="page-title">Cargos do Sistema</h2>
+          </div>
+          <button class="btn btn-primary" id="btn-novo-cargo">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Novo Cargo
+          </button>
+        </div>
+        
+        <div class="search-bar" style="margin-bottom: 2rem;">
+          <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search-roles" placeholder="Buscar cargo...">
+        </div>
+
+        <div id="roles-list" class="roles-list-grid">
+          <div class="loading-users">Carregando cargos...</div>
+        </div>
+      </div>
     </div>
 
   </main>
+      </div> <!-- Fim layout-content -->
+    </div> <!-- Fim layout-main -->
+  </div> <!-- Fim layout-wrapper -->
 
   <!-- Modal: Novo Usuário -->
   <div class="modal-overlay" id="modal-novo">
@@ -144,23 +162,8 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             Nível de Acesso
           </div>
-          <div class="role-selector">
-            <label class="role-option">
-              <input type="radio" name="novo-role" value="adm_l1">
-              <div class="role-card"><span class="role-icon">💎</span><strong>ADM N1</strong><small>Sênior/Dev</small></div>
-            </label>
-            <label class="role-option">
-              <input type="radio" name="novo-role" value="adm_l2">
-              <div class="role-card"><span class="role-icon">🛡️</span><strong>ADM N2</strong><small>Setor/Chefia</small></div>
-            </label>
-            <label class="role-option">
-              <input type="radio" name="novo-role" value="ti" checked>
-              <div class="role-card"><span class="role-icon">🔧</span><strong>TI</strong><small>Suporte</small></div>
-            </label>
-            <label class="role-option">
-              <input type="radio" name="novo-role" value="visitante">
-              <div class="role-card"><span class="role-icon">👤</span><strong>Visitante</strong><small>Consulta</small></div>
-            </label>
+          <div class="role-selector" id="novo-role-options">
+            <!-- Gerado dinamicamente via JS -->
           </div>
 
         <p id="form-error" class="form-error hidden"></p>
@@ -197,23 +200,8 @@
           Nível de Acesso
         </div>
         
-        <div class="role-selector">
-          <label class="role-option">
-            <input type="radio" name="edit-role" value="adm_l1">
-            <div class="role-card"><span class="role-icon">💎</span><strong>ADM N1</strong><small>Sênior/Dev</small></div>
-          </label>
-          <label class="role-option">
-            <input type="radio" name="edit-role" value="adm_l2">
-            <div class="role-card"><span class="role-icon">🛡️</span><strong>ADM N2</strong><small>Setor/Chefia</small></div>
-          </label>
-          <label class="role-option">
-            <input type="radio" name="edit-role" value="ti">
-            <div class="role-card"><span class="role-icon">🔧</span><strong>TI</strong><small>Suporte</small></div>
-          </label>
-          <label class="role-option">
-            <input type="radio" name="edit-role" value="visitante">
-            <div class="role-card"><span class="role-icon">👤</span><strong>Visitante</strong><small>Consulta</small></div>
-          </label>
+        <div class="role-selector" id="edit-role-options">
+          <!-- Gerado dinamicamente via JS -->
         </div>
 
         <button class="btn btn-primary btn-save-role" id="btn-salvar-role" style="margin-top:1.5rem; width:100%">
@@ -250,6 +238,39 @@
   </div>
 
   <!-- Toast -->
+  <!-- Modal: Novo Cargo -->
+  <div id="modal-cargo" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">Novo Cargo</h3>
+        <button class="close-btn" id="btn-fechar-cargo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <form id="form-novo-cargo">
+        <div class="form-group">
+          <label class="form-label">Nome do Cargo</label>
+          <input type="text" id="cargo-nome" class="form-input" placeholder="Ex: Auxiliar de TI" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">ID do Cargo (Identificador único)</label>
+          <input type="text" id="cargo-id" class="form-input" placeholder="Ex: auxiliar_ti" required>
+          <small style="color: var(--text-secondary); font-size: 0.75rem; margin-top: 0.25rem;">Use apenas letras minúsculas e sublinhados.</small>
+        </div>
+
+        <div id="cargo-error" class="form-error hidden"></div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="btn-cancelar-cargo">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-salvar-cargo">
+            <span id="cargo-salvar-text">Criar Cargo</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
   <script type="module" src="app.js"></script>

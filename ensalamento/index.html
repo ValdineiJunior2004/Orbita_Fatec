@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Órbita Fatec · Ensalamento</title>
-  <link rel="stylesheet" href="../hub.css">
+  <link rel="stylesheet" href="../layout.css">
+  <link rel="stylesheet" href="../layout.css">
   <link rel="stylesheet" href="ensalamento.css">
 </head>
 <body>
@@ -12,47 +13,19 @@
   <!-- Background Effects -->
   <div class="particles"></div>
 
-  <!-- AUTH GUARD (Proteção de carregamento) -->
-  <div id="auth-guard" style="position:fixed; inset:0; background:var(--bg); z-index:2000; display:flex; align-items:center; justify-content:center;">
-    <div class="orbit-container" style="width:60px; height:60px;">
-      <div class="orbit-center" style="width:12px; height:12px;"></div>
-      <div class="orbit-planet" style="width:8px; height:8px; transform-origin:4px 33px;"></div>
-    </div>
+  <!-- Novo Auth Guard Padrão -->
+  <div id="auth-guard" class="layout-auth-guard">
+    <div class="layout-spinner"></div>
+    <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
   </div>
 
-  <!-- MAIN MODULE CONTAINER -->
-  <div id="app" class="hidden">
-    <header class="hub-header">
-      <div class="hub-header-inner">
-        <div class="header-left-group">
-          <a href="../" class="back-link" title="Voltar ao Hub">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-          </a>
-          <div class="hub-brand">
-            <div class="orbit-container">
-              <div class="orbit-center">F</div>
-              <div class="orbit-planet"></div>
-            </div>
-            <span class="hub-logo">
-              <span class="logo-orbita">ÓRBITA</span>
-              <span class="logo-fatec">FATEC</span>
-            </span>
-            <span class="mod-indicator">/ Ensalamento</span>
-          </div>
-        </div>
-
-        <div class="hub-user-area">
-          <span class="role-badge" id="role-badge">ADMINISTRADOR</span>
-          <div class="hub-user-info">
-            <div class="user-avatar" id="user-avatar">A</div>
-            <span class="user-name" id="user-display-name">admti</span>
-          </div>
-          <button id="logout-btn" class="logout-btn" title="Sair">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          </button>
-        </div>
-      </div>
-    </header>
+  <div id="app" class="layout-wrapper hidden">
+    <!-- Sidebar injetada pelo layout.js -->
+    
+    <div class="layout-main">
+      <!-- Header injetado pelo layout.js -->
+      
+      <div class="layout-content">
 
     <main class="ensalamento-container">
       <div style="margin-bottom: 3rem;">
@@ -182,7 +155,10 @@
       </section>
 
     </main>
-  </div>
+    </main>
+      </div> <!-- Fim layout-content -->
+    </div> <!-- Fim layout-main -->
+  </div> <!-- Fim layout-wrapper -->
 
   <!-- MODAL: CURSO -->
   <div id="modal-course" class="modal-overlay">

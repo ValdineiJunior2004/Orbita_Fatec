@@ -5,156 +5,117 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Movimentar · Órbita</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
-  <link rel="stylesheet" href="../hub.css">
+  <link rel="stylesheet" href="../layout.css">
   <link rel="stylesheet" href="emprestimo.css">
 </head>
-<body>
+<body class="bg-light">
 
   <!-- Auth Guard -->
-  <div id="auth-guard" class="auth-guard hidden">
-    <div class="auth-guard-card" style="text-align:center; padding:2rem; background:var(--bg-card); border-radius:var(--radius-lg); border:1px solid var(--border); width: 90%; max-width: 350px;">
-      
-      <div id="auth-loading">
-        <h2 style="color:var(--orange)">Acesso Restrito</h2>
-        <p>Autenticando sessão...</p>
-      </div>
+  <div id="auth-guard" class="layout-auth-guard hidden">
+    <div class="layout-spinner"></div>
+    <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+  </div>
 
-      <div id="login-wrapper" class="hidden">
-        <div class="orbit-container" style="margin: 0 auto 1.5rem auto;">
-          <div class="orbit-center">F</div>
-          <div class="orbit-planet"></div>
-        </div>
-        <h2 style="margin-bottom:1.5rem; font-size:1.5rem">Fazer Login</h2>
-        <form id="login-form-movimentar" style="text-align:left;">
-          <div class="form-group">
-            <label class="form-label">E-mail</label>
-            <input type="email" id="login-email-mov" class="form-control" placeholder="E-mail" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Senha</label>
-            <input type="password" id="login-pw-mov" class="form-control" placeholder="Senha" required>
-          </div>
-          <button type="submit" class="btn btn-primary" style="width:100%; margin-top:1rem; padding: 0.9rem">Entrar e Movimentar</button>
-        </form>
-      </div>
+  <!-- Layout Wrapper -->
+  <div id="app" class="layout-wrapper hidden">
+    <!-- Sidebar injetada pelo layout.js -->
 
+    <div class="layout-main">
+      <!-- Header injetado pelo layout.js -->
+
+      <div class="layout-content">
+        <main class="mod-main" id="emprestimo-main-section" style="max-width: 500px; margin: 0 auto; padding-top: 2rem;">
+          
+          <div style="margin-bottom: 2rem;">
+            <a href="index.html" style="display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: 0.2s;" onmouseover="this.style.color='var(--primary-blue)'" onmouseout="this.style.color='var(--text-secondary)'">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+              Voltar ao Dashboard
+            </a>
+          </div>
+
+          <!-- Info Card do Notebook -->
+          <div class="info-card" style="background: white; border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 1.5rem; display: flex; align-items: center; gap: 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 4px 12px rgba(3, 20, 38, 0.03);">
+            <div style="background: rgba(15, 78, 184, 0.08); padding: 0.75rem; border-radius: 14px; color: var(--primary-blue); display: flex; align-items: center; justify-content: center;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </div>
+            <div>
+              <h2 id="notebook-name" style="margin:0; font-size: 1.2rem; font-weight: 800; color: var(--text-main);">---</h2>
+              <div style="display:flex; gap:0.5rem; margin-top:0.25rem;">
+                <span id="current-status-badge" class="badge" style="font-size: 0.7rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 6px;">---</span>
+                <span style="font-size:0.7rem; color:var(--text-secondary)">Últ. Mov: <span id="last-update" style="font-weight: 600;">---</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Alert de Reserva -->
+          <div id="reservation-alert" class="hidden" style="background: #eff6ff; border: 1px solid #3b82f6; padding: 1rem; border-radius: 15px; margin-bottom: 1.5rem; display: flex; gap: 0.8rem; align-items: center;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <div style="font-size:0.85rem">
+              <strong style="color:#1d4ed8; display:block">Equipamento Reservado</strong>
+              <span id="reservation-msg" style="color:#64748b"></span>
+            </div>
+          </div>
+
+          <!-- Form de Movimentação -->
+          <div class="form-card">
+            <form id="movimentacao-form">
+              <label class="form-label-section" style="color: var(--text-secondary); font-size: 0.75rem; font-weight: 700; margin-bottom: 1.25rem;">Selecione a Nova Situação</label>
+              
+              <div class="status-selector">
+                <label class="status-option">
+                  <input type="radio" name="status" value="guardado" required>
+                  <div class="status-card">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-guardado)" stroke-width="2.5"><path d="M21 8v13H3V8M1 3h22v5H1z"/></svg>
+                    <span>Guardar</span>
+                  </div>
+                </label>
+
+                <label class="status-option">
+                  <input type="radio" name="status" value="emprestado">
+                  <div class="status-card">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-emprestado)" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                    <span>Empréstimo</span>
+                  </div>
+                </label>
+
+                <label class="status-option">
+                  <input type="radio" name="status" value="cedido">
+                  <div class="status-card">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-cedido)" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span>Cedido</span>
+                  </div>
+                </label>
+              </div>
+
+              <div id="dynamic-fields" style="margin-top: 1rem;"></div>
+
+              <div class="form-group" style="margin-top: 1.5rem;">
+                <label class="form-label">Observação Adicional</label>
+                <textarea class="form-control" id="observacao" rows="3" placeholder="Ex: Equipamento apresenta risco na tela..."></textarea>
+              </div>
+
+              <button type="submit" class="btn-confirm" id="submit-btn" style="width:100%; padding: 1.1rem; border: none; border-radius: 14px; background: linear-gradient(135deg, var(--secondary-blue), var(--primary-blue)); color: white; font-weight: 700; font-size: 1rem; cursor: pointer; box-shadow: 0 8px 25px rgba(15, 78, 184, 0.25); transition: 0.2s;">
+                Confirmar Movimentação
+              </button>
+            </form>
+          </div>
+        </main>
+      </div>
     </div>
   </div>
 
-  <!-- Header Padronizado Órbita -->
-  <header class="hub-header">
-    <div class="hub-header-inner">
-      <div class="header-left-group">
-        <a href="./" class="back-link" title="Voltar ao Dashboard">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-        </a>
-        <div class="hub-brand">
-          <div class="orbit-container">
-              <div class="orbit-center">F</div>
-            <div class="orbit-planet"></div>
-          </div>
-          <span class="hub-logo">
-            <span class="logo-orbita">ÓRBITA</span>
-            <span class="logo-fatec">FATEC</span>
-          </span>
-          <span class="mod-indicator">/ Movimentação</span>
-        </div>
-      </div>
-
-      <div class="hub-user-area">
-        <span class="role-badge" id="role-badge">ADMINISTRADOR</span>
-        <div class="hub-user-info">
-          <div class="user-avatar" id="header-avatar">A</div>
-          <span class="user-name" id="user-name-display">admti</span>
-        </div>
-        <button id="logout-btn" class="logout-btn" title="Sair" onclick="window.location.href='../'">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <main class="emp-main hidden" id="emprestimo-main-section">
-    <!-- Info Card do Notebook -->
-    <div class="info-card">
-      <div style="background:rgba(255,255,255,0.05); padding:1rem; border-radius:15px; color:var(--orange)">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-      </div>
-      <div>
-        <h2 id="notebook-name" style="margin:0; font-size:1.4rem; font-weight:800;">---</h2>
-        <div style="display:flex; gap:0.5rem; margin-top:0.3rem;">
-           <span id="current-status-badge" class="badge">---</span>
-           <span style="font-size:0.75rem; color:var(--text-muted)">Últ: <span id="last-update">---</span></span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Alert de Reserva -->
-    <div id="reservation-alert" class="hidden" style="background:rgba(59, 130, 246, 0.1); border:1px solid var(--c-reservado); padding:1rem; border-radius:15px; margin-bottom:1.5rem; display:flex; gap:0.8rem; align-items:center;">
-       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--c-reservado)" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-       <div style="font-size:0.85rem">
-         <strong style="color:var(--c-reservado); display:block">Equipamento Reservado</strong>
-         <span id="reservation-msg" style="color:var(--text-muted)"></span>
-       </div>
-    </div>
-
-    <!-- Form de Movimentação -->
-    <div class="form-card">
-      <form id="movimentacao-form">
-        <label class="form-label-section">Nova Situação</label>
-        
-        <div class="status-selector">
-          <label class="status-option">
-            <input type="radio" name="status" value="guardado" required>
-            <div class="status-card">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--c-guardado)" stroke-width="2"><path d="M21 8v13H3V8M1 3h22v5H1z"/></svg>
-              <span>Guardar</span>
-            </div>
-          </label>
-
-          <label class="status-option">
-            <input type="radio" name="status" value="emprestado">
-            <div class="status-card">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--c-emprestado)" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-              <span>Empréstimo</span>
-            </div>
-          </label>
-
-          <label class="status-option">
-            <input type="radio" name="status" value="cedido">
-            <div class="status-card">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--c-cedido)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              <span>Cedido</span>
-            </div>
-          </label>
-        </div>
-
-        <div id="dynamic-fields"></div>
-
-        <div class="form-group">
-          <label class="form-label">Observação</label>
-          <textarea class="form-control" id="observacao" rows="2" placeholder="Ex: Sem mouse..."></textarea>
-        </div>
-
-        <button type="submit" class="btn btn-primary" id="submit-btn" style="width:100%; padding:1rem; font-size:1rem;">
-          Confirmar Mudança
-        </button>
-      </form>
-    </div>
-  </main>
-
-  <!-- Modais de Sucesso / Bloqueio (Omitidos para brevidade, mas mantidos no app.js) -->
   <div id="success-modal" class="modal-overlay">
     <div class="modal-content">
-      <div style="background:var(--c-guardado); width:60px; height:60px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 1.5rem;">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+      <div style="background: #10b981; width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 1.5rem; box-shadow: 0 8px 20px rgba(16, 185, 129, 0.25);">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
-      <h2 style="margin-bottom:0.5rem">Atualizado!</h2>
-      <p style="color:var(--text-muted); margin-bottom:1.5rem">Movimentação registrada com sucesso.</p>
-      <button class="btn btn-secondary" onclick="window.location.href='./'" style="width:100%">Voltar ao Dashboard</button>
+      <h2 style="margin-bottom:0.5rem; font-weight: 800;">Concluído!</h2>
+      <p style="color:var(--text-secondary); margin-bottom:2rem; font-weight: 500;">A situação do equipamento foi atualizada no banco de dados.</p>
+      <button class="btn btn-secondary" onclick="window.location.href='/emprestimo/index.html'" style="width:100%; padding: 1rem; border-radius: 12px; border: 1px solid var(--border-color); background: white; color: var(--text-main); font-weight: 700; cursor: pointer;">Voltar ao Início</button>
     </div>
   </div>
 
-  <script type="module" src="app.js"></script>
+  <script type="module" src="/emprestimo/app.js"></script>
 </body>
 </html>
+

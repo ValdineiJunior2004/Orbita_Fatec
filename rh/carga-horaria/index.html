@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Carga Horária · Órbita - FatecIVP</title>
+  <link rel="stylesheet" href="../../layout.css">
+  <link rel="stylesheet" href="carga-horaria.css">
+</head>
+<body>
+  <div class="particles"></div>
+
+  <!-- Novo Auth Guard Padrão -->
+  <div id="auth-guard" class="layout-auth-guard">
+    <div class="layout-spinner"></div>
+    <h3 style="color:var(--text-main); font-weight:600;">Autenticando...</h3>
+  </div>
+
+  <div id="app" class="layout-wrapper hidden">
+    <!-- Sidebar injetada pelo layout.js -->
+    
+    <div class="layout-main">
+      <!-- Header injetado pelo layout.js -->
+      
+      <div class="layout-content">
+
+  <!-- Main -->
+  <main id="main-content" class="ch-main hidden">
+
+    <!-- Navegação por abas -->
+    <div class="ch-tab-nav">
+      <button class="ch-tab active" data-tab="funcionarios" id="tab-btn-funcionarios">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Funcionários
+      </button>
+      <button class="ch-tab" data-tab="lancar" id="tab-btn-lancar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Lançar Horas
+      </button>
+      <button class="ch-tab" data-tab="historico" id="tab-btn-historico">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Histórico
+      </button>
+    </div>
+
+    <!-- ===================== ABA: FUNCIONÁRIOS ===================== -->
+    <section id="tab-funcionarios" class="ch-section">
+      <div class="section-topbar">
+        <div class="section-title-group">
+          <div class="section-icon" style="color:#10b981; background:rgba(16,185,129,0.1); border-color:rgba(16,185,129,0.2);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">Funcionários</h2>
+            <span id="func-count" class="section-subtitle">0 cadastrados</span>
+          </div>
+        </div>
+        <button class="btn-action" id="btn-novo-func">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Novo Funcionário
+        </button>
+      </div>
+
+      <!-- Busca -->
+      <div class="ch-search-bar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-func" placeholder="Buscar funcionário por nome...">
+      </div>
+
+      <!-- Lista -->
+      <div id="lista-funcionarios" class="ch-list">
+        <div class="ch-loading">Carregando funcionários...</div>
+      </div>
+    </section>
+
+    <!-- ===================== ABA: LANÇAR HORAS ===================== -->
+    <section id="tab-lancar" class="ch-section hidden">
+      <!-- Seletor de modo -->
+      <div class="modo-selector">
+        <button class="modo-btn active" data-modo="evento" id="modo-btn-evento">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Evento (Entrada/Saída)
+        </button>
+        <button class="modo-btn" data-modo="manual" id="modo-btn-manual">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Lançamento Manual
+        </button>
+      </div>
+
+      <!-- Modo: Evento -->
+      <div id="modo-evento">
+        <!-- Lista de Eventos (Visível inicialmente) -->
+        <div id="evento-lista-container">
+          <div class="evento-config">
+            <div class="evento-input-group">
+              <label class="form-label">Criar Novo Evento Multi-dias</label>
+              <div class="evento-input-row" style="flex-wrap: wrap;">
+                <input type="text" id="novo-nome-evento" class="ch-input" placeholder="Ex: Feira de Inovação..." style="flex: 2; min-width: 200px;">
+                <div style="display: flex; gap: 0.5rem; flex: 1; min-width: 280px;">
+                  <div style="flex: 1;"><label class="time-label" style="font-size:0.65rem; color:var(--ch-muted);">DATA INÍCIO</label><input type="date" id="evento-data-inicio" class="ch-input" style="padding: 0.6rem;"></div>
+                  <div style="flex: 1;"><label class="time-label" style="font-size:0.65rem; color:var(--ch-muted);">DATA TÉRMINO</label><input type="date" id="evento-data-fim" class="ch-input" style="padding: 0.6rem;"></div>
+                </div>
+                <button class="btn-action" id="btn-criar-evento" style="height: 44px; align-self: flex-end;">
+                  Criar
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="lista-eventos-ativos" class="ch-list" style="margin-top: 1rem;">
+            <div class="ch-loading">Carregando eventos ativos...</div>
+          </div>
+        </div>
+
+        <!-- Visão Interna do Evento (Oculta inicialmente) -->
+        <div id="evento-detalhe-container" class="hidden">
+          <div class="section-topbar" style="margin-bottom: 1.5rem;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <button class="btn-secondary" id="btn-voltar-lista" style="padding: 0.6rem 1rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                Voltar
+              </button>
+              <div>
+                <h2 class="section-title" id="detalhe-evento-nome" style="font-size: 1.2rem;">Nome do Evento</h2>
+                <span class="section-subtitle" id="detalhe-evento-periodo">Carregando período...</span>
+              </div>
+            </div>
+            <button class="icon-btn delete-btn" id="btn-excluir-evento-atual" title="Excluir Evento">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            </button>
+          </div>
+
+          <div id="evento-status-bar" class="evento-status-bar" style="margin-bottom: 1rem;">
+            <div class="evento-legenda">
+              <span id="dia-atual-label" style="margin-right: 1.5rem; color: #10b981; font-weight: 800; font-size: 0.9rem; background: rgba(16,185,129,0.1); padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(16,185,129,0.2);">DIA: --/--</span>
+              <span class="legenda-item"><span class="status-dot aguardando"></span> Aguardando</span>
+              <span class="legenda-item"><span class="status-dot andamento"></span> Em andamento</span>
+              <span class="legenda-item"><span class="status-dot finalizado"></span> Finalizado</span>
+            </div>
+          </div>
+
+          <div id="evento-lista-funcionarios" class="evento-lista">
+            <!-- Funcionários -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Modo: Manual -->
+      <div id="modo-manual" class="hidden">
+        <div class="manual-form-card">
+          <h3 class="manual-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Lançamento Manual / Débito
+          </h3>
+          <form id="form-manual">
+            <div class="form-group">
+              <label class="form-label">Tipo de Operação *</label>
+              <div class="modo-selector" style="grid-template-columns: 1fr 1fr; margin-bottom: 0.5rem;">
+                <label class="tipo-op-label">
+                  <input type="radio" name="manual-tipo-op" value="credito" checked>
+                  <div class="tipo-op-card credito">➕ Adicionar Horas</div>
+                </label>
+                <label class="tipo-op-label">
+                  <input type="radio" name="manual-tipo-op" value="debito">
+                  <div class="tipo-op-card debito">➖ Retirar Horas</div>
+                </label>
+              </div>
+            </div>
+            <div class="form-group" style="position: relative;">
+              <label class="form-label">Buscar Funcionário *</label>
+              <input type="text" id="manual-func-search" class="ch-input" placeholder="Digite para buscar..." list="lista-funcs-datalist" autocomplete="off" required>
+              <datalist id="lista-funcs-datalist"></datalist>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Motivo / Descrição *</label>
+              <input type="text" id="manual-descricao" class="ch-input" placeholder="Ex: Uso de banco de horas, bônus..." required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Quantidade de Horas *</label>
+              <input type="number" id="manual-horas" class="ch-input" placeholder="Ex: 2.5" min="0.1" step="0.1" required>
+            </div>
+            <button type="submit" class="btn-action" style="width:100%; justify-content:center;" id="btn-manual-submit">
+              Confirmar Lançamento
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== ABA: HISTÓRICO ===================== -->
+    <section id="tab-historico" class="ch-section hidden">
+      <div class="historico-topbar">
+        <div class="historico-select-group">
+          <label class="form-label">Buscar Funcionário</label>
+          <input type="text" id="hist-func-search" class="ch-input" placeholder="Digite o nome do funcionário..." list="hist-funcs-datalist" autocomplete="off">
+          <datalist id="hist-funcs-datalist"></datalist>
+        </div>
+        <button class="btn-secondary" id="btn-exportar-csv" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Exportar CSV
+        </button>
+      </div>
+
+      <!-- Card de resumo -->
+      <div id="hist-resumo" class="hist-resumo hidden">
+        <div class="resumo-card">
+          <div class="resumo-info">
+            <div class="resumo-avatar" id="resumo-avatar">?</div>
+            <div>
+              <div class="resumo-nome" id="resumo-nome">—</div>
+              <div class="resumo-cargo" id="resumo-cargo">—</div>
+            </div>
+          </div>
+          <div class="resumo-stats">
+            <div class="resumo-stat">
+              <span class="resumo-stat-valor" id="resumo-total-horas">0h</span>
+              <span class="resumo-stat-label">Total de Horas Extras</span>
+            </div>
+            <div class="resumo-stat">
+              <span class="resumo-stat-valor" id="resumo-total-registros">0</span>
+              <span class="resumo-stat-label">Registros</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lista de registros -->
+      <div id="hist-lista" class="hist-lista">
+        <div class="evento-placeholder">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <p>Selecione um funcionário para ver o histórico.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+      </div> <!-- Fim layout-content -->
+    </div> <!-- Fim layout-main -->
+  </div> <!-- Fim layout-wrapper -->
+
+  <!-- ===================== MODAL: FUNCIONÁRIO ===================== -->
+  <div class="modal-overlay" id="modal-func">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-func-titulo">Novo Funcionário</h3>
+        <button class="modal-close" id="btn-fechar-modal-func">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <form id="form-func">
+        <input type="hidden" id="func-edit-id">
+
+        <div class="form-group">
+          <label class="form-label">Nome completo *</label>
+          <input type="text" class="ch-input" id="func-nome" placeholder="Ex: Maria Aparecida Silva" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Cargo *</label>
+          <input type="text" class="ch-input" id="func-cargo" placeholder="Ex: Secretária, Coordenador..." required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Turnos de Trabalho *</label>
+          <div class="turnos-grid">
+
+            <!-- Manhã -->
+            <div class="turno-bloco" id="bloco-manha">
+              <label class="turno-toggle-label">
+                <input type="checkbox" class="turno-check" id="turno-check-manha" value="manha">
+                <div class="turno-toggle-box">
+                  <svg class="turno-check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <span class="turno-emoji">🌅</span>
+                <span class="turno-nome">Manhã</span>
+              </label>
+              <div class="turno-horarios hidden" id="horarios-manha">
+                <div class="turno-time-row">
+                  <div class="time-field"><label class="time-label">Entrada</label><input type="time" class="ch-input time-input" id="entrada-manha"></div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-top:1.6rem;opacity:.4;flex-shrink:0"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                  <div class="time-field"><label class="time-label">Saída</label><input type="time" class="ch-input time-input" id="saida-manha"></div>
+                  <div class="time-field"><label class="time-label">Total</label><div class="turno-calc" id="calc-manha">—</div></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tarde -->
+            <div class="turno-bloco" id="bloco-tarde">
+              <label class="turno-toggle-label">
+                <input type="checkbox" class="turno-check" id="turno-check-tarde" value="tarde">
+                <div class="turno-toggle-box">
+                  <svg class="turno-check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <span class="turno-emoji">☀️</span>
+                <span class="turno-nome">Tarde</span>
+              </label>
+              <div class="turno-horarios hidden" id="horarios-tarde">
+                <div class="turno-time-row">
+                  <div class="time-field"><label class="time-label">Entrada</label><input type="time" class="ch-input time-input" id="entrada-tarde"></div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-top:1.6rem;opacity:.4;flex-shrink:0"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                  <div class="time-field"><label class="time-label">Saída</label><input type="time" class="ch-input time-input" id="saida-tarde"></div>
+                  <div class="time-field"><label class="time-label">Total</label><div class="turno-calc" id="calc-tarde">—</div></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Noite -->
+            <div class="turno-bloco" id="bloco-noite">
+              <label class="turno-toggle-label">
+                <input type="checkbox" class="turno-check" id="turno-check-noite" value="noite">
+                <div class="turno-toggle-box">
+                  <svg class="turno-check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <span class="turno-emoji">🌙</span>
+                <span class="turno-nome">Noite</span>
+              </label>
+              <div class="turno-horarios hidden" id="horarios-noite">
+                <div class="turno-time-row">
+                  <div class="time-field"><label class="time-label">Entrada</label><input type="time" class="ch-input time-input" id="entrada-noite"></div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-top:1.6rem;opacity:.4;flex-shrink:0"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                  <div class="time-field"><label class="time-label">Saída</label><input type="time" class="ch-input time-input" id="saida-noite"></div>
+                  <div class="time-field"><label class="time-label">Total</label><div class="turno-calc" id="calc-noite">—</div></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+          <!-- Total consolidado -->
+          <div class="turno-total-row">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Total por dia: <strong id="turno-total-horas">0h</strong>
+          </div>
+        </div>
+
+        <p id="func-form-error" class="form-error hidden"></p>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="btn-cancelar-modal-func">Cancelar</button>
+          <button type="submit" class="btn-action" id="btn-salvar-func">
+            <span id="func-btn-text">Salvar</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="ch-toast hidden"></div>
+
+  <script type="module" src="carga-horaria.js"></script>
+</body>
+</html>

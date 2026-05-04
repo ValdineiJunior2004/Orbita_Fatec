@@ -12,7 +12,8 @@ import {
   signInWithEmailAndPassword,
   updateProfile,
   updatePassword,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  signOut
 } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 import {
   getFirestore,
@@ -29,6 +30,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
 import { firebaseConfig } from "../firebase-config.js";
+import { setupLayout } from "../layout.js";
 
 
 const fbApp    = initializeApp(firebaseConfig);
@@ -40,13 +42,13 @@ const db       = getFirestore(fbApp);
 let currentUser = null;
 let currentRole = null;
 let allUsers    = [];
+let allRoles    = [];
 let globalPermissions = {}; // Carregado do Firestore (config/permissions)
 let activeRoleTab     = 'adm_l2';
 
 // ---- Elements ----
 const authGuard    = document.getElementById('auth-guard');
 const mainContent  = document.getElementById('main-content');
-const headerAvatar = document.getElementById('header-avatar');
 const userCount    = document.getElementById('user-count');
 const searchInput  = document.getElementById('search-users');
 const userList     = document.getElementById('user-list');
@@ -62,23 +64,30 @@ onAuthStateChanged(auth, async (user) => {
 
   currentUser = user;
   const name  = user.displayName || user.email.split('@')[0];
-  headerAvatar.textContent = name.charAt(0).toUpperCase();
 
   // Busca role e permissões do usuário
   try {
+    // 1. Busca role do usuário
     const userDoc = await getDoc(doc(db, 'users', user.uid));
-    const userData = userDoc.exists() ? userDoc.data() : { role: 'visitante', permissions: {} };
+    const userData = userDoc.exists() ? userDoc.data() : { role: 'visitante' };
     currentRole = userData.role || 'visitante';
 
-    // AUTO-PROMOÇÃO (Migração)
+    // 2. AUTO-PROMOÇÃO (Migração)
     if (user.uid === 'rSw36LAa8fPI94aYFoVv7JggB6w2' && currentRole !== 'adm_l1') {
       await updateDoc(doc(db, 'users', user.uid), { role: 'adm_l1' });
       currentRole = 'adm_l1';
     }
 
-    const perms = userData.permissions?.usuarios || { view: false, execute: false };
+    // 3. BUSCA PERMISSÕES GLOBAIS (O TI agora depende disso)
+    let perms = { view: false, execute: false };
+    const permSnap = await getDoc(doc(db, 'config', 'permissions'));
+    if (permSnap.exists()) {
+      const globalData = permSnap.data();
+      const rolePerms = globalData[currentRole] || {};
+      perms = rolePerms['usuarios'] || { view: false, execute: false };
+    }
 
-    // ADM L1 entra direto. Outros precisam de permissão 'view'.
+    // ADM L1 entra direto. Outros precisam de permissão 'view' vinda do Config Global.
     if (currentRole !== 'adm_l1' && !perms.view) {
       authGuard.classList.remove('hidden');
       return;
@@ -90,10 +99,15 @@ onAuthStateChanged(auth, async (user) => {
     }
   } catch (err) { 
     console.error("Erro auth guard:", err);
-    currentRole = 'visitante'; 
     authGuard.classList.remove('hidden');
     return;
   }
+
+  // Inicializar o novo Layout
+  setupLayout(user, currentRole, 'usuarios', async () => {
+    await signOut(auth);
+    window.location.href = '/login.html';
+  });
 
   mainContent.classList.remove('hidden');
   initPage();
@@ -104,11 +118,16 @@ onAuthStateChanged(auth, async (user) => {
 // ================================================================
 function initPage() {
   loadUsers();
+  loadRoles();
   loadGlobalPermissions();
   setupModals();
   setupPermissionTabs();
   searchInput.addEventListener('input', filterUsers);
+  document.getElementById('search-roles')?.addEventListener('input', filterRoles);
   document.getElementById('btn-save-global-perms').addEventListener('click', saveGlobalPermissions);
+  document.getElementById('btn-novo-cargo')?.addEventListener('click', abrirModalNovoCargo);
+  
+  setupMainTabs();
 }
 
 // ================================================================
@@ -133,6 +152,140 @@ function filterUsers() {
   renderUsers(filtered);
 }
 
+function loadRoles() {
+  const colRef = collection(db, 'roles');
+  onSnapshot(colRef, async (snap) => {
+    if (snap.empty) {
+      // Se não houver cargos, popula com os padrões
+      const defaults = [
+        { id: 'adm_l1',    name: 'ADM N1 - Sênior/Dev' },
+        { id: 'adm_l2',    name: 'ADM N2 - Setor/Chefia' },
+        { id: 'ti',        name: 'TI - Suporte' },
+        { id: 'visitante', name: 'Visitante - Consulta' },
+        { id: 'rh',        name: 'RH - Recursos Humanos' }
+      ];
+      for (const r of defaults) {
+        await setDoc(doc(db, 'roles', r.id), { name: r.name });
+      }
+      return; // O onSnapshot disparará novamente após o setDoc
+    }
+
+    allRoles = [];
+    snap.forEach(d => allRoles.push({ id: d.id, ...d.data() }));
+    allRoles.sort((a, b) => a.name.localeCompare(b.name));
+    renderRoles(allRoles);
+    updateRoleSelects();
+  });
+}
+
+function filterRoles() {
+  const q = document.getElementById('search-roles').value.toLowerCase();
+  const filtered = allRoles.filter(r => r.name.toLowerCase().includes(q) || r.id.toLowerCase().includes(q));
+  renderRoles(filtered);
+}
+
+function updateRoleSelects() {
+  // Update ROLE_LABEL dynamically
+  allRoles.forEach(r => {
+    ROLE_LABEL[r.id] = r.name;
+  });
+
+  // Update Role Select in Permissions Tab
+  const select = document.getElementById('role-select');
+  if (select) {
+    const currentVal = select.value;
+    select.innerHTML = allRoles.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
+    if (allRoles.some(r => r.id === currentVal)) select.value = currentVal;
+    else if (allRoles.length > 0) select.value = allRoles[0].id;
+    activeRoleTab = select.value;
+  }
+
+  const roleIcons = {
+    adm_l1: '💎',
+    adm_l2: '🛡️',
+    ti: '🔧',
+    visitante: '👤',
+    rh: '👥',
+    default: '💼'
+  };
+
+  const roleDescs = {
+    adm_l1: 'Sênior/Dev',
+    adm_l2: 'Setor/Chefia',
+    ti: 'Suporte',
+    visitante: 'Consulta',
+    rh: 'Recursos Humanos',
+    default: 'Cargo Personalizado'
+  };
+
+  const renderRoleOption = (r, nameAttr) => `
+    <label class="role-option">
+      <input type="radio" name="${nameAttr}" value="${r.id}" required>
+      <div class="role-card">
+        <span class="role-icon">${roleIcons[r.id] || roleIcons.default}</span>
+        <strong>${esc(r.name)}</strong>
+        <small>${roleDescs[r.id] || roleDescs.default}</small>
+      </div>
+    </label>
+  `;
+
+  // Update Role options in Create User Modal
+  const roleRadios = document.getElementById('novo-role-options');
+  if (roleRadios) {
+    roleRadios.innerHTML = allRoles.map(r => renderRoleOption(r, 'novo-role')).join('');
+  }
+
+  // Update Role options in Edit User Modal
+  const editRadios = document.getElementById('edit-role-options');
+  if (editRadios) {
+    editRadios.innerHTML = allRoles.map(r => renderRoleOption(r, 'edit-role')).join('');
+  }
+}
+
+function renderRoles(list) {
+  const container = document.getElementById('roles-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!list.length) {
+    container.innerHTML = `<div class="empty-state"><p>Nenhum cargo cadastrado.</p></div>`;
+    return;
+  }
+
+  list.forEach(role => {
+    const card = document.createElement('div');
+    card.className = 'role-item-card';
+    card.innerHTML = `
+      <div class="role-item-info">
+        <div class="role-item-name">${esc(role.name)}</div>
+        <div class="role-item-id">ID: ${esc(role.id)}</div>
+      </div>
+      <div class="role-item-actions">
+        <button class="icon-btn delete-role-btn" data-id="${role.id}" data-name="${role.name}" title="Excluir cargo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>
+      </div>
+    `;
+    card.querySelector('.delete-role-btn').onclick = () => confirmarExcluirCargo(role.id, role.name);
+    container.appendChild(card);
+  });
+}
+
+async function confirmarExcluirCargo(id, name) {
+  if (id === 'adm_l1') {
+    showToast("❌ O cargo ADM N1 não pode ser excluído.", "error");
+    return;
+  }
+  if (!confirm(`Deseja excluir permanentemente o cargo "${name}"?\nIsso pode afetar usuários vinculados.`)) return;
+
+  try {
+    await deleteDoc(doc(db, 'roles', id));
+    showToast(`🗑️ Cargo ${name} removido.`, "success");
+  } catch (err) {
+    showToast(`❌ Erro ao excluir: ${err.message}`, "error");
+  }
+}
+
 // ================================================================
 //  RENDER
 // ================================================================
@@ -143,13 +296,15 @@ const ROLE_LABEL = {
   adm_l1: 'ADM N1', 
   adm_l2: 'ADM N2', 
   ti: 'TI', 
-  visitante: 'Visitante' 
+  visitante: 'Visitante',
+  rh: 'RH'
 };
 
 const MODULES = [
-  { id: 'emprestimo',  name: 'Empréstimos', icon: '📦' },
-  { id: 'usuarios',    name: 'Usuários',    icon: '👥' },
-  { id: 'ensalamento', name: 'Ensalamento', icon: '🏫' }
+  { id: 'emprestimo',    name: 'Empréstimos',   icon: '📦' },
+  { id: 'usuarios',     name: 'Usuários',     icon: '👥' },
+  { id: 'ensalamento',  name: 'Ensalamento',  icon: '🏫' },
+  { id: 'carga-horaria',name: 'Carga Horária',icon: '⏰' }
 ];
 
 function renderUsers(list) {
@@ -229,6 +384,66 @@ function setupModals() {
   document.getElementById('btn-cancelar-editar').addEventListener('click', () => fecharModal('modal-editar'));
   document.getElementById('btn-salvar-role').addEventListener('click',     salvarRole);
   document.getElementById('btn-send-reset').addEventListener('click',      enviarResetSenha);
+
+  // Modal Cargo
+  document.getElementById('btn-fechar-cargo').addEventListener('click',   () => fecharModal('modal-cargo'));
+  document.getElementById('btn-cancelar-cargo').addEventListener('click', () => fecharModal('modal-cargo'));
+  document.getElementById('form-novo-cargo').addEventListener('submit', salvarNovoCargo);
+}
+
+function abrirModalNovoCargo() {
+  document.getElementById('form-novo-cargo').reset();
+  document.getElementById('cargo-error').classList.add('hidden');
+  abrirModal('modal-cargo');
+}
+
+async function salvarNovoCargo(e) {
+  e.preventDefault();
+  const nome = document.getElementById('cargo-nome').value.trim();
+  const id = document.getElementById('cargo-id').value.trim().toLowerCase().replace(/\s+/g, '_');
+  const errEl = document.getElementById('cargo-error');
+  const btn = document.getElementById('btn-salvar-cargo');
+
+  if (!id.match(/^[a-z0-9_]+$/)) {
+    errEl.textContent = "ID inválido. Use apenas letras, números e sublinhados.";
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  btn.disabled = true;
+  document.getElementById('cargo-salvar-text').textContent = "Criando...";
+
+  try {
+    const docRef = doc(db, 'roles', id);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      throw new Error("Este ID de cargo já existe.");
+    }
+
+    await setDoc(docRef, { name: nome });
+    
+    // Inicializar permissões padrão para o novo cargo
+    const permSnap = await getDoc(doc(db, 'config', 'permissions'));
+    if (permSnap.exists()) {
+      const perms = permSnap.data();
+      perms[id] = {
+        emprestimo: {view: true, execute: false},
+        usuarios: {view: false, execute: false},
+        ensalamento: {view: true, execute: false},
+        'carga-horaria': {view: false, execute: false}
+      };
+      await setDoc(doc(db, 'config', 'permissions'), perms);
+    }
+
+    fecharModal('modal-cargo');
+    showToast(`✅ Cargo ${nome} criado!`, 'success');
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    document.getElementById('cargo-salvar-text').textContent = "Criar Cargo";
+  }
 }
 
 function abrirModalNovo() {
@@ -261,11 +476,12 @@ async function loadGlobalPermissions() {
     if (snap.exists()) {
       globalPermissions = snap.data();
     } else {
-      // Default initial config
+      // Configuração inicial padrão
       globalPermissions = {
-        adm_l2:    { emprestimo:{view:true, execute:false}, usuarios:{view:true, execute:false}, ensalamento:{view:true, execute:false} },
-        ti:        { emprestimo:{view:true, execute:true},  usuarios:{view:false,execute:false}, ensalamento:{view:true, execute:true} },
-        visitante: { emprestimo:{view:true, execute:false}, usuarios:{view:false,execute:false}, ensalamento:{view:true, execute:false} }
+        adm_l2:    { emprestimo:{view:true, execute:false}, usuarios:{view:true, execute:false}, ensalamento:{view:true, execute:false}, 'carga-horaria':{view:true, execute:true} },
+        ti:        { emprestimo:{view:true, execute:true},  usuarios:{view:false,execute:false}, ensalamento:{view:true, execute:true},  'carga-horaria':{view:false,execute:false} },
+        visitante: { emprestimo:{view:true, execute:false}, usuarios:{view:false,execute:false}, ensalamento:{view:true, execute:false},  'carga-horaria':{view:false,execute:false} },
+        rh:        { emprestimo:{view:false,execute:false}, usuarios:{view:false,execute:false}, ensalamento:{view:false,execute:false}, 'carga-horaria':{view:true, execute:true} }
       };
     }
     renderPermissionsGrid('global-permissions-grid', globalPermissions[activeRoleTab] || {});
@@ -275,13 +491,37 @@ async function loadGlobalPermissions() {
 }
 
 function setupPermissionTabs() {
-  const tabs = document.querySelectorAll('.role-tab');
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      tabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      activeRoleTab = tab.dataset.role;
+  const roleSelect = document.getElementById('role-select');
+  if (roleSelect) {
+    roleSelect.addEventListener('change', (e) => {
+      activeRoleTab = e.target.value;
       renderPermissionsGrid('global-permissions-grid', globalPermissions[activeRoleTab] || {});
+    });
+    // Trigger initial render for the first option
+    activeRoleTab = roleSelect.value;
+  }
+}
+
+function setupMainTabs() {
+  const tabBtns = document.querySelectorAll('.tab-btn[data-tab]');
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Deactivate all
+      tabBtns.forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => {
+        c.classList.remove('active');
+        c.style.display = 'none';
+      });
+      
+      // Activate clicked
+      btn.classList.add('active');
+      
+      const targetId = `tab-${btn.dataset.tab}`;
+      const targetTab = document.getElementById(targetId);
+      if (targetTab) {
+        targetTab.classList.add('active');
+        targetTab.style.display = 'block';
+      }
     });
   });
 }

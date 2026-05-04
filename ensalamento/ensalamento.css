@@ -9,8 +9,8 @@
   --ead: #22c55e;
   --reservada: #eab308;
   --conflito: #ef4444;
-  --glass: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass: var(--card-bg);
+  --glass-border: var(--border-color);
 }
 
 .ensalamento-container {
@@ -21,8 +21,15 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Tabs */
@@ -42,21 +49,21 @@
   border-radius: 12px;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   font-weight: 600;
   cursor: pointer;
   transition: 0.3s;
 }
 
 .tab-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: white;
+  background: #F8FAFC;
+  color: var(--text-main);
 }
 
 .tab-btn.active {
-  background: var(--purple);
+  background: var(--primary-blue);
   color: white;
-  box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3);
+  box-shadow: 0 4px 15px rgba(15, 78, 184, 0.3);
 }
 
 .tab-content {
@@ -76,8 +83,8 @@
 }
 
 .btn-primary {
-  background: var(--purple);
-  color: white;
+  background: var(--primary-blue);
+  color: rgb(0, 0, 0);
   border: none;
   padding: 0.8rem 1.5rem;
   border-radius: 12px;
@@ -91,7 +98,7 @@
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 20px rgba(124, 58, 237, 0.4);
+  box-shadow: 0 5px 20px rgba(15, 78, 184, 0.4);
 }
 
 /* Filters */
@@ -104,33 +111,37 @@
   flex-wrap: wrap;
   gap: 1.5rem;
   margin-bottom: 2.5rem;
-  align-items: flex-start; /* Alinha pelo topo dos grupos (labels) */
+  align-items: flex-start;
+  /* Alinha pelo topo dos grupos (labels) */
 }
 
 .filter-group {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  flex: 0 1 300px; /* Não cresce infinitamente, base de 300px */
+  flex: 0 1 300px;
+  /* Não cresce infinitamente, base de 300px */
   min-width: 200px;
 }
 
 .filter-group label {
   font-size: 0.75rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-left: 0.2rem;
-  margin-bottom: 0.6rem; /* Margem fixa em vez de gap no flex para mais controle */
+  margin-bottom: 0.6rem;
+  /* Margem fixa em vez de gap no flex para mais controle */
   height: auto;
   display: block;
 }
 
-.form-select, .form-input {
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--glass-border);
-  color: white;
+.form-select,
+.form-input {
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
   padding: 0 1.2rem;
   height: 50px;
   border-radius: 14px;
@@ -145,17 +156,18 @@
 select.form-select {
   cursor: pointer;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 1rem center;
   background-size: 1.2rem;
   padding-right: 3rem;
 }
 
-.form-select:focus, .form-input:focus {
-  border-color: var(--purple);
-  background: rgba(0, 0, 0, 0.6);
-  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.1);
+.form-select:focus,
+.form-input:focus {
+  border-color: var(--primary-blue);
+  background: #F8FAFC;
+  box-shadow: 0 0 0 4px rgba(15, 78, 184, 0.1);
 }
 
 /* Weekly Calendar Grid */
@@ -170,39 +182,40 @@ select.form-select {
 }
 
 .calendar-header {
-  background: rgba(255, 255, 255, 0.05);
+  background: #F8FAFC;
   padding: 1rem;
   text-align: center;
   font-weight: 700;
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-main);
 }
 
 .calendar-time-col {
-  background: rgba(255, 255, 255, 0.02);
+  background: #FFFFFF;
   padding: 1rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.5);
-  border-bottom: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .calendar-cell {
-  background: var(--bg);
-  min-height: 120px; /* Reduced for better visibility of multiple entries */
+  background: #FFFFFF;
+  min-height: 120px;
+  /* Reduced for better visibility of multiple entries */
   padding: 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  border-bottom: 1px solid var(--glass-border);
+  border-bottom: 1px solid var(--border-color);
   transition: background 0.3s;
 }
 
 .calendar-cell:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: #F8FAFC;
 }
 
 .calendar-entry {
@@ -220,20 +233,69 @@ select.form-select {
   z-index: 10;
 }
 
-.entry-presencial { background: rgba(59, 130, 246, 0.15); color: #93c5fd; border-color: rgba(59, 130, 246, 0.3); }
-.entry-ead { background: rgba(34, 197, 94, 0.15); color: #86efac; border-color: rgba(34, 197, 94, 0.3); }
-.entry-reservada { background: rgba(234, 179, 8, 0.15); color: #fde047; border-color: rgba(234, 179, 8, 0.3); }
-.entry-conflito { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border-color: rgba(239, 68, 68, 0.4); animation: pulse 2s infinite; }
-
-@keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+.entry-presencial {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.3);
 }
 
-.entry-title { font-weight: 800; margin-bottom: 0.2rem; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.entry-subtitle { font-size: 0.75rem; opacity: 0.8; margin-bottom: 0.2rem; display: block; }
-.entry-room { font-size: 0.7rem; font-weight: 700; background: rgba(255, 255, 255, 0.1); padding: 2px 6px; border-radius: 4px; display: inline-block; }
+.entry-ead {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.entry-reservada {
+  background: rgba(234, 179, 8, 0.15);
+  color: #fde047;
+  border-color: rgba(234, 179, 8, 0.3);
+}
+
+.entry-conflito {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.4);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.entry-title {
+  font-weight: 800;
+  margin-bottom: 0.2rem;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-subtitle {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  margin-bottom: 0.2rem;
+  display: block;
+}
+
+.entry-room {
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+}
 
 /* Modals */
 .modal-overlay {
@@ -282,7 +344,9 @@ select.form-select {
   transition: 0.3s;
 }
 
-.modal-close:hover { opacity: 1; }
+.modal-close:hover {
+  opacity: 1;
+}
 
 /* Grid/List for Courses, Classes, Rooms */
 .data-grid {
@@ -303,8 +367,8 @@ select.form-select {
 }
 
 .data-card:hover {
-  border-color: var(--purple);
-  background: rgba(124, 58, 237, 0.05);
+  border-color: var(--primary-blue);
+  background: #F8FAFC;
 }
 
 .card-actions {
@@ -316,7 +380,7 @@ select.form-select {
 .btn-icon {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--glass-border);
-  color: white;
+  color: rgb(79, 67, 255);
   padding: 0.5rem;
   border-radius: 8px;
   cursor: pointer;
@@ -324,8 +388,9 @@ select.form-select {
 }
 
 .btn-icon:hover {
-  background: var(--purple);
-  border-color: var(--purple);
+  background: #F8FAFC;
+  border-color: var(--primary-blue);
+  color: var(--primary-blue);
 }
 
 /* Simulator Styles */
@@ -375,9 +440,20 @@ select.form-select {
   font-size: 0.9rem;
 }
 
-.score-ideal { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
-.score-aceitavel { background: rgba(234, 179, 8, 0.2); color: #facc15; }
-.score-inviavel { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.score-ideal {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+.score-aceitavel {
+  background: rgba(234, 179, 8, 0.2);
+  color: #facc15;
+}
+
+.score-inviavel {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
 
 .allocation-grid {
   display: grid;
@@ -401,15 +477,42 @@ select.form-select {
   font-weight: 700;
 }
 
-.bg-blue { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3); }
-.bg-green { background: rgba(34, 197, 94, 0.2); color: #86efac; border: 1px solid rgba(34, 197, 94, 0.3); }
-.bg-yellow { background: rgba(234, 179, 8, 0.2); color: #fde047; border: 1px solid rgba(234, 179, 8, 0.3); }
+.bg-blue {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.bg-green {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.bg-yellow {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fde047;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
 
 /* Custom Scrollbar */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: var(--purple); }
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--purple);
+}
 
 /* Mapa de Ocupação - Redesign Premium Ultra */
 .occupancy-table-container {
@@ -425,14 +528,15 @@ select.form-select {
 .occupancy-table {
   width: 100%;
   border-collapse: separate;
-  border-spacing: 0 8px; /* Espaçamento entre linhas */
+  border-spacing: 0 8px;
+  /* Espaçamento entre linhas */
 }
 
 .occupancy-table th {
   padding: 1.2rem 1rem;
   text-align: center;
   font-weight: 800;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-secondary);
   text-transform: uppercase;
   font-size: 0.65rem;
   letter-spacing: 2px;
@@ -444,12 +548,12 @@ select.form-select {
 
 .occupancy-table td {
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.02);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: #FFFFFF;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
   text-align: center;
   font-weight: 600;
-  color: white;
+  color: var(--text-main);
 }
 
 .occupancy-table td:first-child {
@@ -520,7 +624,7 @@ select.form-select {
 }
 
 .cell-empty {
-  color: rgba(255, 255, 255, 0.05);
+  color: var(--border-color);
   font-weight: 400;
 }
 
@@ -601,13 +705,16 @@ select.form-select {
 }
 
 .lesson-item .filter-group {
-  flex: 1 1 180px; /* Permite crescer igual, base de 180px */
-  min-width: 150px; /* Garante que caibam lado a lado */
+  flex: 1 1 180px;
+  /* Permite crescer igual, base de 180px */
+  min-width: 150px;
+  /* Garante que caibam lado a lado */
   margin-bottom: 0;
 }
 
 .lesson-item h5 {
-  width: 100%; /* Força o título a ficar na sua própria linha */
+  width: 100%;
+  /* Força o título a ficar na sua própria linha */
   margin-bottom: 0.5rem;
   color: var(--orange);
 }
@@ -619,7 +726,7 @@ select.form-select {
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255,255,255,0.2);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   border-top-color: white;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -629,5 +736,7 @@ select.form-select {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }

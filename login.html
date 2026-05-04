@@ -10,36 +10,35 @@
 
   <div class="particles"></div>
 
-  <div class="orbit-wrapper">
-    <div class="orbit-container">
-      <div class="orbit-center">F</div>
-      <div class="orbit-planet"></div>
-    </div>
-    <span class="login-logo">
-      <span class="logo-orbita">ÓRBITA</span>
-      <span class="logo-fatec">FATEC</span>
-    </span>
-  </div>
-
   <div class="login-card">
-    <p class="login-subtitle">Acesso ao Sistema</p>
+    <div class="orbit-wrapper">
+      <div class="orbit-container">
+        <div class="orbit-center">F</div>
+        <div class="orbit-planet"></div>
+      </div>
+      <h1 class="login-logo">
+        <span class="logo-orbita">ÓRBITA</span><span class="logo-fatec">FATEC</span>
+      </h1>
+    </div>
+
+    <p class="login-subtitle">Bem-vindo de volta! Por favor, insira suas credenciais institucionais.</p>
 
     <form id="login-form">
       <div class="form-group">
-        <label>E-mail Institucional</label>
-        <input type="email" id="login-email" class="form-input" placeholder="usuario@fatec.sp.gov.br" required>
+        <label for="login-email">E-mail Institucional</label>
+        <input type="email" id="login-email" class="form-input" placeholder="seu.nome@fatec.sp.gov.br" required>
       </div>
       
       <div class="form-group">
-        <label>Senha</label>
+        <label for="login-password">Senha de Acesso</label>
         <input type="password" id="login-password" class="form-input" placeholder="••••••••" required>
       </div>
 
       <button type="submit" class="login-btn" id="login-btn">
-        <span id="login-btn-text">Entrar</span>
+        <span id="login-btn-text">Acessar Sistema</span>
       </button>
 
-      <p id="login-error">E-mail ou senha incorretos.</p>
+      <p id="login-error">As credenciais informadas não são válidas.</p>
     </form>
   </div>
 
