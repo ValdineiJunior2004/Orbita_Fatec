@@ -3,94 +3,20 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Funções Auxiliares
-    function isAuthenticated() {
-      return request.auth != null;
-    }
+    // =====================================================================
+    // ÓRBITA FATEC - RESTRICTED SERVER-SIDE ONLY ARCHITECTURE
+    // =====================================================================
+    // O sistema foi completamente migrado para uma API REST em Node.js.
+    // Todas as operações de leitura e gravação acontecem no Backend 
+    // usando o Firebase Admin SDK (que ignora estas regras por ser root).
+    //
+    // Portanto, QUALQUER tentativa de acesso direto pelo lado do cliente
+    // (navegador, postman, etc) está PROIBIDA, garantindo segurança absoluta.
+    // =====================================================================
 
-    function getRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'visitante');
-    }
-
-    function isAdmin() {
-      return isAuthenticated() && (getRole() == 'adm_l1' || getRole() == 'adm_l2');
-    }
-
-    // Configurações Globais (Permissões por Cargo)
-    match /config/permissions {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    // Coleção de Cargos (Nova)
-    match /roles/{roleId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    // Coleção de Usuários
-    match /users/{userId} {
-      // Permitir ler o próprio perfil
-      allow get: if isAuthenticated() && request.auth.uid == userId;
-      // Administradores podem ler todos e listar
-      allow read, list: if isAdmin();
-      allow write: if isAdmin();
-    }
-
-    // Módulo Notas (Meu Espaço)
-    match /users/{userId}/notes/{noteId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // Quadro de Avisos (Avisos Institucionais)
-    match /notices/{noticeId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    // Módulo Empréstimo
-    match /notebooks/{notebookId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && (getRole() == 'ti' || isAdmin());
-    }
-
-    // Módulo Ensalamento
-    match /courses/{courseId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-    match /classes/{classId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-    match /rooms/{roomId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-    match /calendarEntries/{entryId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    function isRH() {
-      return isAuthenticated() && (getRole() == 'rh' || isAdmin());
-    }
-
-    // Módulo RH (Carga Horária)
-    match /funcionarios_rh/{docId} {
-      allow read, write: if isRH();
-    }
-    match /registros_carga_horaria/{docId} {
-      allow read, write: if isRH();
-    }
-    match /eventos_rh/{docId} {
-      allow read, write: if isRH();
-    }
-
-    // Bloqueio Global - Medida de Segurança Máxima
     match /{document=**} {
       allow read, write: if false; 
     }
+    
   }
 }
-

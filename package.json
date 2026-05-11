@@ -1,0 +1,16 @@
+{
+  "name": "orbita-api",
+  "version": "1.0.0",
+  "description": "Backend API para Órbita Fatec",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js",
+    "dev": "node --watch api/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "firebase-admin": "^13.9.0"
+  }
+}

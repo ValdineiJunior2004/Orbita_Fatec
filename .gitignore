@@ -72,3 +72,7 @@ firebase-debug.log
 firebase-debug.*.log
 .firebase/
 core/firebase-config.js
+serviceAccountKey.json
+
+
+.vercel

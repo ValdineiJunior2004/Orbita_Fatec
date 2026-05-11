@@ -37,7 +37,26 @@ import { escapeHTML as esc } from "../core/security.js";
 const fbApp    = initializeApp(firebaseConfig);
 const analytics = getAnalytics(fbApp);
 const auth     = getAuth(fbApp);
-const db       = getFirestore(fbApp);
+const db       = getFirestore(fbApp); // Mantido apenas para Auth Guard (users)
+
+const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') 
+  ? 'http://localhost:3000/api' 
+  : '/api';
+
+async function apiFetch(endpoint, options = {}) {
+  const token = await currentUser.getIdToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    ...(options.headers || {})
+  };
+  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Erro na API: ${res.status}`);
+  }
+  return res.json();
+}
 
 // ---- State ----
 let currentUser = null;
@@ -65,26 +84,21 @@ onAuthStateChanged(auth, async (user) => {
   const name  = user.displayName || user.email.split('@')[0];
 
   // Busca role e permissões do usuário
-  try {
-    // 1. Busca role do usuário
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    const userData = userDoc.exists() ? userDoc.data() : { role: 'visitante' };
-    currentRole = userData.role || 'visitante';
-
-    // 2. AUTO-PROMOÇÃO (Migração)
-    if (user.uid === 'rSw36LAa8fPI94aYFoVv7JggB6w2' && currentRole !== 'adm_l1') {
-      await updateDoc(doc(db, 'users', user.uid), { role: 'adm_l1' });
-      currentRole = 'adm_l1';
+    // 1. Busca role do usuário via API
+    try {
+      const userData = await apiFetch('/usuarios/me');
+      currentRole = userData.role || 'visitante';
+    } catch(e) {
+      currentRole = 'visitante';
     }
 
-    // 3. BUSCA PERMISSÕES GLOBAIS (O TI agora depende disso)
+    // 2. BUSCA PERMISSÕES GLOBAIS
     let perms = { view: false, execute: false };
-    const permSnap = await getDoc(doc(db, 'config', 'permissions'));
-    if (permSnap.exists()) {
-      const globalData = permSnap.data();
+    try {
+      const globalData = await apiFetch('/usuarios/config/permissions');
       const rolePerms = globalData[currentRole] || {};
       perms = rolePerms['usuarios'] || { view: false, execute: false };
-    }
+    } catch(e) {}
 
     // ADM L1 entra direto. Outros precisam de permissão 'view' vinda do Config Global.
     if (currentRole !== 'adm_l1' && !perms.view) {
@@ -95,10 +109,6 @@ onAuthStateChanged(auth, async (user) => {
     // Se não tiver permissão 'execute', bloqueia ações de edição/delete
     if (currentRole !== 'adm_l1' && !perms.execute) {
       document.body.classList.add('hide-execute');
-    }
-    } catch (err) { 
-      authGuard.classList.remove('hidden');
-      return;
     }
 
   // Inicializar o novo Layout
@@ -132,13 +142,27 @@ function initPage() {
 //  LOAD USERS (realtime)
 // ================================================================
 function loadUsers() {
-  const colRef = collection(db, 'users');
-  onSnapshot(colRef, (snap) => {
-    allUsers = [];
-    snap.forEach(d => allUsers.push({ uid: d.id, ...d.data() }));
+  setInterval(async () => {
+    try {
+      const data = await apiFetch('/usuarios');
+      allUsers = data;
+      allUsers.sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+      
+      // Preservar o filtro atual se o usuário estiver buscando
+      if (document.activeElement === searchInput || searchInput.value) {
+        filterUsers();
+      } else {
+        renderUsers(allUsers);
+      }
+    } catch(e) {}
+  }, 30000);
+
+  // Primeira carga imediata
+  apiFetch('/usuarios').then(data => {
+    allUsers = data;
     allUsers.sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
     renderUsers(allUsers);
-  });
+  }).catch(e => console.error(e));
 }
 
 function filterUsers() {
@@ -151,10 +175,19 @@ function filterUsers() {
 }
 
 function loadRoles() {
-  const colRef = collection(db, 'roles');
-  onSnapshot(colRef, async (snap) => {
-    if (snap.empty) {
-      // Se não houver cargos, popula com os padrões
+  setInterval(async () => {
+    try {
+      const data = await apiFetch('/usuarios/roles');
+      allRoles = data;
+      allRoles.sort((a, b) => a.name.localeCompare(b.name));
+      renderRoles(allRoles);
+      updateRoleSelects();
+    } catch(e) {}
+  }, 30000);
+
+  // Primeira carga
+  apiFetch('/usuarios/roles').then(async (data) => {
+    if (data.length === 0) {
       const defaults = [
         { id: 'adm_l1',    name: 'ADM N1 - Sênior/Dev' },
         { id: 'adm_l2',    name: 'ADM N2 - Setor/Chefia' },
@@ -163,17 +196,15 @@ function loadRoles() {
         { id: 'rh',        name: 'RH - Recursos Humanos' }
       ];
       for (const r of defaults) {
-        await setDoc(doc(db, 'roles', r.id), { name: r.name });
+        await apiFetch('/usuarios/roles', { method: 'POST', body: JSON.stringify(r) });
       }
-      return; // O onSnapshot disparará novamente após o setDoc
+    } else {
+      allRoles = data;
+      allRoles.sort((a, b) => a.name.localeCompare(b.name));
+      renderRoles(allRoles);
+      updateRoleSelects();
     }
-
-    allRoles = [];
-    snap.forEach(d => allRoles.push({ id: d.id, ...d.data() }));
-    allRoles.sort((a, b) => a.name.localeCompare(b.name));
-    renderRoles(allRoles);
-    updateRoleSelects();
-  });
+  }).catch(e => console.error(e));
 }
 
 function filterRoles() {
@@ -277,7 +308,7 @@ async function confirmarExcluirCargo(id, name) {
   if (!confirm(`Deseja excluir permanentemente o cargo "${name}"?\nIsso pode afetar usuários vinculados.`)) return;
 
   try {
-    await deleteDoc(doc(db, 'roles', id));
+    await apiFetch(`/usuarios/roles/${id}`, { method: 'DELETE' });
     showToast(`🗑️ Cargo ${name} removido.`, "success");
   } catch (err) {
     showToast(`❌ Erro ao excluir: ${err.message}`, "error");
@@ -412,26 +443,17 @@ async function salvarNovoCargo(e) {
   document.getElementById('cargo-salvar-text').textContent = "Criando...";
 
   try {
-    const docRef = doc(db, 'roles', id);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      throw new Error("Este ID de cargo já existe.");
-    }
-
-    await setDoc(docRef, { name: nome });
+    await apiFetch('/usuarios/roles', { method: 'POST', body: JSON.stringify({ id, name: nome }) });
     
-    // Inicializar permissões padrão para o novo cargo
-    const permSnap = await getDoc(doc(db, 'config', 'permissions'));
-    if (permSnap.exists()) {
-      const perms = permSnap.data();
-      perms[id] = {
-        emprestimo: {view: true, execute: false},
-        usuarios: {view: false, execute: false},
-        ensalamento: {view: true, execute: false},
-        'carga-horaria': {view: false, execute: false}
-      };
-      await setDoc(doc(db, 'config', 'permissions'), perms);
-    }
+    // Opcional: Atualizar permissões ao criar cargo (pode ser feito no backend, mas mantemos o padrão)
+    const perms = await apiFetch('/usuarios/config/permissions');
+    perms[id] = {
+      emprestimo: {view: true, execute: false},
+      usuarios: {view: false, execute: false},
+      ensalamento: {view: true, execute: false},
+      'carga-horaria': {view: false, execute: false}
+    };
+    await apiFetch('/usuarios/config/permissions', { method: 'PUT', body: JSON.stringify(perms) });
 
     fecharModal('modal-cargo');
     showToast(`✅ Cargo ${nome} criado!`, 'success');
@@ -470,9 +492,9 @@ function abrirModalEditar(uid, name, role, email) {
 // ================================================================
 async function loadGlobalPermissions() {
   try {
-    const snap = await getDoc(doc(db, 'config', 'permissions'));
-    if (snap.exists()) {
-      globalPermissions = snap.data();
+    const data = await apiFetch('/usuarios/config/permissions');
+    if (Object.keys(data).length > 0) {
+      globalPermissions = data;
     } else {
       // Configuração inicial padrão
       globalPermissions = {
@@ -541,7 +563,7 @@ async function saveGlobalPermissions() {
   globalPermissions[activeRoleTab] = rolePerms;
 
   try {
-    await setDoc(doc(db, 'config', 'permissions'), globalPermissions);
+    await apiFetch('/usuarios/config/permissions', { method: 'PUT', body: JSON.stringify(globalPermissions) });
     showToast('✅ Permissões globais atualizadas!', 'success');
   } catch (err) {
     showToast('❌ Erro ao salvar permissões: ' + err.message, 'error');
@@ -619,39 +641,16 @@ async function criarUsuario(e) {
   spin.classList.remove('hidden');
 
   try {
-    // Cria instância secundária para não deslogar o ADM atual
-    const secondaryApp  = initializeApp(firebaseConfig, `secondary-${Date.now()}`);
-    const secondaryAuth = getAuth(secondaryApp);
-
-    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, senha);
-    await updateProfile(cred.user, { displayName: nome });
-
-    const uid = cred.user.uid;
-
-    // Salva no Firestore
-    await setDoc(doc(db, 'users', uid), {
-      uid,
-      name:      nome,
-      email,
-      role,
-      createdAt: new Date().toISOString(),
-      createdBy: currentUser.uid
+    await apiFetch('/usuarios', {
+      method: 'POST',
+      body: JSON.stringify({ nome, email, senha, role })
     });
-
-    // Fecha instância secundária
-    await secondaryAuth.signOut();
-    await deleteApp(secondaryApp);
 
     fecharModal('modal-novo');
     showToast(`✅ ${nome} criado com sucesso!`, 'success');
 
   } catch (err) {
-    const msgs = {
-      'auth/email-already-in-use': 'Este e-mail já está cadastrado.',
-      'auth/invalid-email':        'E-mail inválido.',
-      'auth/weak-password':        'Senha muito fraca. Use pelo menos 6 caracteres.',
-    };
-    errEl.textContent = msgs[err.code] || `Erro: ${err.message}`;
+    errEl.textContent = err.message || "Erro ao criar usuário.";
     errEl.classList.remove('hidden');
   } finally {
     btn.disabled = false;
@@ -671,9 +670,7 @@ async function salvarRole() {
   const btn = document.getElementById('btn-salvar-role');
   btn.disabled = true; btn.textContent = 'Salvando...';
   try {
-    await updateDoc(doc(db, 'users', uid), { 
-      role: newRole
-    });
+    await apiFetch(`/usuarios/${uid}/role`, { method: 'PUT', body: JSON.stringify({ role: newRole }) });
     showToast(`✅ Nível alterado para ${ROLE_LABEL[newRole]}`, 'success');
   } catch (err) {
     showToast(`❌ Erro ao salvar: ${err.message}`, 'error');
@@ -721,7 +718,7 @@ async function confirmarDelete(uid, name) {
   if (!confirmado) return;
 
   try {
-    await deleteDoc(doc(db, 'users', uid));
+    await apiFetch(`/usuarios/${uid}`, { method: 'DELETE' });
     showToast(`🗑️ ${name} removido do sistema.`, 'success');
   } catch (err) {
     showToast(`❌ Erro ao remover: ${err.message}`, 'error');

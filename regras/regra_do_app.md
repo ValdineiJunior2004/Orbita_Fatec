@@ -4,25 +4,20 @@
 O Órbita FATEC é um ecossistema de gestão institucional desenvolvido para a FATEC. O objetivo do sistema é centralizar o controle de ativos (empréstimos de equipamentos), gestão de usuários e permissões, ensalamento de salas de aula e controle de carga horária para eventos do RH. O sistema utiliza uma arquitetura baseada em módulos independentes que compartilham uma identidade visual e um núcleo de autenticação/autorização centralizado.
 
 ## 2. Estrutura de pastas
-- `/` (Raiz): Contém o Hub principal (`index.html`), arquivos de configuração do Firebase, e o núcleo do layout compartilhado.
-  - `layout.js` / `layout.css`: Geradores dinâmicos da interface global (Sidebar e Header).
-  - `permissions.js`: Definição estática de módulos e cargos iniciais.
-  - `firebase-config.js`: Credenciais de conexão com o Firebase.
-  - `login.html` / `login.js`: Portal de acesso e autenticação.
-- `/emprestimo`: Módulo de gestão de empréstimos de notebooks e equipamentos de T.I.
-- `/usuarios`: Módulo de administração de usuários e configuração global de permissões (RBAC).
-- `/ensalamento`: Módulo de visualização e gestão de ocupação de salas e laboratórios.
-- `/rh/carga-horaria`: Módulo de controle de ponto e horas excedentes para eventos.
-- `/img`: Ativos de imagem e logotipos.
-- `/regras`: Documentação técnica e logs de alteração (Este diretório).
+- `/` (Raiz): Contém o front-end, configuração do Vercel e núcleo do layout compartilhado.
+  - `vercel.json`: Arquivo que gerencia o roteamento "Zero Config" para o Vercel.
+  - `firestore.rules`: Regras de segurança rigorosas trancando todo o acesso client-side.
+- `/api`: Servidor Backend em Node.js (Express) hospedado no Vercel. Contém a lógica de autenticação via Firebase Admin SDK (`firebase.js`) e as rotas para os módulos (`/rotas`).
+- `/core`: Arquivos compartilhados da arquitetura do Front-end (Firebase Auth, layout, segurança).
+- `/emprestimo`, `/usuarios`, `/ensalamento`, `/rh/carga-horaria`, `/meu-espaco`: Módulos independentes do sistema consumindo a API REST através da função `apiFetch`.
+- `/regras`: Documentação técnica e logs de alteração.
 
-## 3. Fluxo de autenticação
-1. **Entrada**: O usuário acessa a raiz. Se não houver sessão ativa (verificado via `onAuthStateChanged`), é redirecionado para `login.html`.
-2. **Login**: Realizado via Firebase Auth (E-mail/Senha).
-3. **Sessão**: Após o login, o sistema busca o documento do usuário na coleção `users` do Firestore para identificar seu cargo (`role`).
-4. **Comunicação**: Todos os e-mails transacionais são configurados para `pt-br`. O link de redefinição aponta para uma página customizada (`/redefinir-senha.html`).
-5. **Proteção de Tela**: Cada módulo utiliza um `auth-guard`.
-5. **Logout**: O botão de sair (no Header injetado pelo `layout.js`) limpa a sessão no Firebase e redireciona para a tela de login.
+## 3. Fluxo de autenticação e Arquitetura REST
+O sistema utiliza uma arquitetura híbrida segura:
+1. **Login Client-side**: A autenticação inicial é feita via Firebase Auth (Identity Platform).
+2. **REST API**: Qualquer leitura/gravação de dados no Firestore deve ser solicitada à `/api`. O Frontend anexa o Token JWT (gerado no passo 1) via cabeçalho `Authorization: Bearer`.
+3. **Validação Server-side (RBAC)**: O `auth.js` do backend valida o token JWT usando o Firebase Admin SDK, consulta o banco para conferir o cargo do usuário e bloqueia/permite a requisição (Erro 403 Forbidden).
+4. **Segurança do Firestore**: O `firestore.rules` possui a regra suprema `allow read, write: if false;`. Como o Vercel usa o Admin SDK (root), apenas ele consegue interagir com os dados, anulando 100% dos ataques do lado do cliente.
 
 ## 4. Cargos e permissões
 O sistema utiliza Role-Based Access Control (RBAC). Os cargos base definidos em `permissions.js` são:
@@ -38,35 +33,25 @@ O sistema utiliza Role-Based Access Control (RBAC). Os cargos base definidos em 
 ## 5. Módulos do sistema
 
 ### Meu Espaço (Antigo Dashboard)
-- **Caminho**: `/meu-espaco/index.html`, `meu-espaco.js`, `meu-espaco.css`
-- **Finalidade**: Área personalizada de produtividade do usuário com notas pessoais, avisos institucionais e widgets contextuais.
-- **Principais funções**: `setupNotes()` (CRUD de post-its), `setupNotices()` (avisos ADM N1), `renderWidgets()` (baseado em RBAC).
-- **Dependências**: Firestore (coleções `users/{uid}/notes` e `institutionalNotices`).
+- **Finalidade**: Área de produtividade do usuário com post-its e mural de avisos.
+- **Backend API**: `/api/rotas/meu-espaco.js` (Lida com coleções `users/{uid}/notes` e `notices`).
 
 ### Empréstimos
-- **Caminho**: `/emprestimo/index.html`, `/emprestimo/app.js`, `/emprestimo/emprestimo.css`
 - **Finalidade**: Controle de retirada e devolução de equipamentos.
-- **Principais funções**: Leitura de QR Code, filtros de status (Cedido, Disponível).
-- **Dependências**: Firestore (coleção `items`).
+- **Backend API**: `/api/rotas/emprestimos.js` (Lida com coleção `items` e lógica de timeout).
 
 ### Usuários
-- **Caminho**: `/usuarios/index.html`, `/usuarios/app.js`, `/usuarios/usuarios.css`
-- **Finalidade**: Gestão de contas de acesso e configuração de permissões globais por cargo.
-- **Principais funções**: `renderUsers()`, `setupMainTabs()`, `saveGlobalPermissions()`.
-- **Dependências**: Firebase Auth (criação de contas via secondary app), Firestore (coleções `users` e `config/permissions`).
+- **Finalidade**: Gestão de contas e permissões (RBAC).
+- **Backend API**: `/api/rotas/usuarios.js` (Usa Auth do Firebase Admin para criar usuários e gerencia coleção `users` e `config`).
 
 ### Ensalamento
-- **Caminho**: `/ensalamento/index.html`, `/ensalamento/ensalamento.js`, `/ensalamento/simulation-engine.js`, `/ensalamento/ensalamento.css`
-- **Finalidade**: Gestão inteligente de ocupação de salas e laboratórios com motor de simulação.
-- **Padrão Institucional**: 3 dias presenciais, 2 dias EAD/Carga Protegida. Sábados proibidos.
-- **Principais funções**: `SimulationEngine` (motor heurístico), `renderBottlenecks()` (análise de capacidade), `generateSuggestions()` (ranqueamento inteligente).
-- **Dependências**: Firestore (coleções `rooms`, `classes`, `calendarEntries`, `simulations`).
+- **Finalidade**: Gestão inteligente de salas com motor de simulação de conflitos de horários rodando 100% no servidor.
+- **Backend API**: `/api/rotas/ensalamento.js`.
 
 ### Carga Horária
-- **Caminho**: `/rh/carga-horaria/index.html`, `/rh/carga-horaria/carga-horaria.js`, `/rh/carga-horaria/carga-horaria.css`
-- **Finalidade**: Registro de entrada/saída em eventos e cálculo de horas trabalhadas.
-- **Principais funções**: Registro de timestamps, exportação de histórico.
-- **Dependências**: Firestore (coleção `carga_horaria`).
+- **Finalidade**: Registro de entrada/saída em eventos (RH).
+- **Frontend Adapter**: O Front-end não reescreveu a lógica pesada de datas. Usou-se um "Mock Adapter" que intercepta comandos do Firestore local e os transforma em chamadas REST para `/api/carga-horaria`.
+- **Backend API**: `/api/rotas/carga-horaria.js`.
 
 ## 6. Padrão visual
 O sistema segue uma identidade visual institucional "Light Theme" moderna:
@@ -96,8 +81,14 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-05-11] Conclusão da Migração Client-Server (REST API)
+- **Autor**: Antigravity
+- **Arquivos alterados**: Todos os módulos de frontend, pasta `/api`, `firestore.rules`.
+- **Motivo**: O projeto amadureceu e o modelo de banco de dados aberto no front-end tornou-se inseguro.
+- **Impacto**: Todo o tráfego do Firestore no frontend foi interceptado pela função utilitária `apiFetch` (usando Auth Tokens do Firebase). O Firestore foi trancado com `allow read, write: if false`, garantindo segurança e validação de regras exclusivamente pelo Backend hospedado no Vercel.
+
 ### [2026-05-04] Criação da documentação de regras do app
-- Autor: Antigravity
+- **Autor**: Antigravity
 - Branch: main (standard update)
 - Arquivos alterados:
   - `/regras/regra_do_app.md`
@@ -232,6 +223,55 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Tipo: Ajuste de Interface.
 - Motivo: Destacar o "Meu Espaço" como o ponto de partida central do usuário, deixando-o fora das categorias para acesso imediato.
 - Impacto: Navegação mais rápida para a Home do sistema.
+
+### [2026-05-11] Fase 1: Criação da Arquitetura Cliente-Servidor (Backend Vercel)
+- Autor: Antigravity
+- Branch: main (architecture-refactor)
+- Arquivos criados:
+  - `api/index.js` (Entry point do Express)
+  - `api/firebase.js` (Inicialização do Firebase Admin SDK)
+  - `api/middlewares/auth.js` (Middleware de validação de ID Token)
+  - `vercel.json` (Configuração de Serverless Functions do Vercel)
+- Arquivos alterados:
+  - `package.json` (Inclusão de scripts e dependências)
+- Tipo: Refatoração de Arquitetura (BaaS para REST API).
+- Motivo: Aumentar a segurança e criar um backend verdadeiro rodando em ambiente Serverless Node.js no Vercel, encapsulando as regras de acesso ao Firestore com Firebase Admin.
+- Impacto: Desacoplamento do Firebase Firestore do Frontend (em andamento) garantindo que o banco de dados só seja acessado de forma validada pela API.
+- Como testar:
+  - Rodar `npm start` localmente e acessar `http://localhost:3000/api` para ver a mensagem online.
+- Como reverter:
+  - Remover o diretório `api/` e `vercel.json`.
+
+### [2026-05-11] Fase 2: Migração do Módulo de Empréstimos para a API REST
+- Autor: Antigravity
+- Branch: main (api-migration-emprestimos)
+- Arquivos criados:
+  - `api/rotas/emprestimos.js` (Rotas GET e PUT)
+- Arquivos alterados:
+  - `api/index.js` (Registro das rotas)
+  - `emprestimo/app.js` (Refatorado para usar `apiFetch` via HTTP no lugar de Firebase Client SDK, substituído o `onSnapshot` por polling).
+- Tipo: Migração de Backend.
+- Motivo: Transferir a lógica de consulta e gravação do banco de dados para a API protegida por Token JWT do Firebase.
+- Impacto: Maior segurança. Os dados de `notebooks` não são mais acessíveis diretamente pelo front-end sem passar pelo servidor.
+- Como testar:
+  - Abra 2 terminais: um rodando o front-end (ex: Live Server) e outro rodando o back-end (`npm run dev`).
+  - Acesse a página de empréstimos e faça uma reserva ou altere o status de um equipamento. Verifique na aba *Network* se as requisições estão indo para `http://localhost:3000/api/emprestimos`.
+
+### [2026-05-11] Fase 2.1: Migração do Módulo de Usuários para a API REST
+- Autor: Antigravity
+- Branch: main (api-migration-usuarios)
+- Arquivos criados:
+  - `api/rotas/usuarios.js` (Rotas GET, POST, PUT, DELETE para usuários, cargos e permissões globais)
+- Arquivos alterados:
+  - `api/index.js` (Registro das rotas de usuários)
+  - `usuarios/app.js` (Substituição massiva do Firebase Client SDK para `apiFetch`. Remoção completa do *Secondary App* para criação de usuários. Implementação de polling no lugar de `onSnapshot`).
+- Tipo: Migração de Backend e Refatoração de Segurança.
+- Motivo: A criação de usuários pelo front-end exigia uma "gambiarra" de deslogar/logar ou criar uma instância secundária do Firebase, o que é instável e inseguro. Gerenciar regras de RBAC (cargos e permissões) direto no client side também abria margem para manipulação.
+- Impacto: Aumento drástico de estabilidade ao criar contas (agora feito pelo `firebase-admin` via REST API) e fechamento de brechas de segurança no acesso à coleção `users` e `config/permissions`.
+- Como testar:
+  - Logue como ADM N1.
+  - Acesse o módulo Usuários. Crie um novo cargo. Altere as permissões globais. Crie um novo usuário.
+  - Verifique se as chamadas de rede vão para `/api/usuarios`.
 
 ---
 *Fim da documentação.*

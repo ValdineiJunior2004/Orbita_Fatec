@@ -4,18 +4,100 @@
 // ================================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
-import {
-  getFirestore, collection, doc, getDoc, getDocs, addDoc,
-  updateDoc, deleteDoc, onSnapshot, query, where, orderBy,
-  Timestamp, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 import { firebaseConfig } from "../../core/firebase-config.js";
 import { setupLayout } from "../../core/layout.js";
 import { escapeHTML as esc } from "../../core/security.js";
 
 const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db   = getFirestore(app);
+
+const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') 
+  ? 'http://localhost:3000/api' 
+  : '/api';
+
+async function apiFetch(endpoint, options = {}) {
+  const token = await auth.currentUser.getIdToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    ...(options.headers || {})
+  };
+  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+  if (!res.ok) throw new Error(`Erro na API: ${res.status}`);
+  return res.json();
+}
+
+// ==========================================
+// FIRESTORE MOCK ADAPTER (MIGRAÇÃO REST)
+// ==========================================
+const db = {};
+const doc = (d, col, id) => `${col}/${id}`;
+const collection = (d, col) => col;
+const getDoc = async (path) => {
+    if (path.startsWith('users/')) {
+        const user = await apiFetch('/usuarios/me');
+        return { exists: () => true, data: () => user };
+    }
+    const [col, id] = path.split('/');
+    const data = await apiFetch(`/carga-horaria/${col}/${id}`);
+    return { exists: () => !!data, data: () => data, id };
+};
+
+const query = (col, ...args) => {
+    const qParams = new URLSearchParams();
+    args.forEach(a => {
+        if (a.type === 'where') qParams.append(a.field, a.val);
+    });
+    return `${col}?${qParams.toString()}`;
+};
+const where = (field, op, val) => ({ type: 'where', field, val });
+const orderBy = (field, dir) => ({ type: 'orderBy', field, dir });
+
+const getDocs = async (path) => {
+    const data = await apiFetch(`/carga-horaria/${path}`);
+    return { docs: data.map(d => ({
+        id: d.id, 
+        data: () => {
+            const cloned = {...d};
+            if (cloned.entrada) cloned.entrada = { toDate: () => new Date(cloned.entrada) };
+            if (cloned.saida) cloned.saida = { toDate: () => new Date(cloned.saida) };
+            if (cloned.criadoEm) cloned.criadoEm = { toDate: () => new Date(cloned.criadoEm) };
+            if (cloned.lancadoEm) cloned.lancadoEm = { toDate: () => new Date(cloned.lancadoEm) };
+            return cloned;
+        }
+    }))};
+};
+
+const addDoc = async (col, data) => {
+    const cleanData = {...data};
+    if (cleanData.entrada?.toDate) cleanData.entrada = cleanData.entrada.toDate().toISOString();
+    if (cleanData.saida?.toDate) cleanData.saida = cleanData.saida.toDate().toISOString();
+    const res = await apiFetch(`/carga-horaria/${col}`, { method: 'POST', body: JSON.stringify(cleanData) });
+    return { id: res.id };
+};
+
+const updateDoc = async (path, data) => {
+    const [col, id] = path.split('/');
+    const cleanData = {...data};
+    if (cleanData.entrada?.toDate) cleanData.entrada = cleanData.entrada.toDate().toISOString();
+    if (cleanData.saida?.toDate) cleanData.saida = cleanData.saida.toDate().toISOString();
+    await apiFetch(`/carga-horaria/${col}/${id}`, { method: 'PUT', body: JSON.stringify(cleanData) });
+};
+
+const deleteDoc = async (path) => {
+    const [col, id] = path.split('/');
+    await apiFetch(`/carga-horaria/${col}/${id}`, { method: 'DELETE' });
+};
+
+const serverTimestamp = () => 'TIMESTAMP';
+const Timestamp = { fromDate: (date) => ({ toDate: () => date }) };
+
+const onSnapshot = (path, callback) => {
+    const fetchIt = () => getDocs(path).then(callback).catch(()=>{});
+    fetchIt();
+    const interval = setInterval(fetchIt, 30000);
+    return () => clearInterval(interval);
+};
 
 // ---- Estado global ----
 let currentUser     = null;

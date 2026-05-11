@@ -17,7 +17,22 @@ const fbApp  = initializeApp(firebaseConfig);
 const analytics = getAnalytics(fbApp);
 const auth   = getAuth(fbApp);
 const db     = getFirestore(fbApp);
-const colRef = collection(db, "notebooks");
+
+const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') 
+  ? 'http://localhost:3000/api' 
+  : '/api';
+
+async function apiFetch(endpoint, options = {}) {
+  const token = await currentUser.getIdToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    ...(options.headers || {})
+  };
+  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+  if (!res.ok) throw new Error(`Erro na API: ${res.status}`);
+  return res.json();
+}
 
 
 // ---- Constants ----
@@ -80,26 +95,20 @@ onAuthStateChanged(auth, async (user) => {
   if (av) av.textContent = userName.charAt(0).toUpperCase();
   if (nameEl) nameEl.textContent = userName;
 
-  // Buscar Papel (Role)
-  const userDoc = await getDoc(doc(db, "users", user.uid));
+  // Buscar Papel (Role) via API
+  let role = 'visitante';
+  try {
+    const userData = await apiFetch('/usuarios/me');
+    role = userData.role || 'visitante';
+  } catch (err) {}
+
   const roleBadge = document.getElementById('role-badge');
-  const userData = userDoc.exists() ? userDoc.data() : { role: 'visitante' };
-  let role = userData.role || 'visitante';
 
-  // AUTO-PROMOÇÃO (Migração)
-  if (user.uid === 'rSw36LAa8fPI94aYFoVv7JggB6w2' && role !== 'adm_l1') {
-    await updateDoc(doc(db, "users", user.uid), { role: 'adm_l1' });
-    role = 'adm_l1';
-  }
-
-  // Buscar Permissões Globais
+  // Buscar Permissões Globais via API
   let perms = { view: false, execute: false };
   try {
-    const permSnap = await getDoc(doc(db, 'config', 'permissions'));
-    if (permSnap.exists()) {
-      const allPerms = permSnap.data();
-      perms = allPerms[role]?.emprestimo || { view: false, execute: false };
-    }
+    const allPerms = await apiFetch('/usuarios/config/permissions');
+    perms = allPerms[role]?.emprestimo || { view: false, execute: false };
   } catch (err) {
     // Falha silenciosa para segurança
   }
@@ -145,18 +154,10 @@ onAuthStateChanged(auth, async (user) => {
 //  DATA LOADING
 // ================================================================
 async function loadNotebooks() {
-  const snap = await getDocs(colRef);
-  if (snap.empty) {
-    // Seed 30 notebooks on first run
-    for (let i = 1; i <= 30; i++) {
-      const id   = `Not_Med${String(i).padStart(2,'0')}`;
-      const note = { id, status:'guardado', local:'T.I.', sala:'', funcionario:'', setor:'', observacao:'', responsavel:'', lastUpdate: new Date().toISOString() };
-      await setDoc(doc(db, 'notebooks', id), note);
-      notebooksDB.push(note);
-    }
-  } else {
-    snap.forEach(d => notebooksDB.push(d.data()));
-    notebooksDB.sort((a,b) => a.id.localeCompare(b.id));
+  try {
+    notebooksDB = await apiFetch('/emprestimos');
+  } catch (err) {
+    console.error("Erro ao buscar da API:", err);
   }
 }
 
@@ -177,13 +178,13 @@ function initDashboard() {
 
   renderGrid(notebooksDB);
 
-  // Realtime
-  onSnapshot(colRef, snap => {
-    notebooksDB = [];
-    snap.forEach(d => notebooksDB.push(d.data()));
-    notebooksDB.sort((a,b) => a.id.localeCompare(b.id));
-    applyFilters();
-  });
+  // Polling via API REST para simular realtime
+  setInterval(async () => {
+    try {
+      notebooksDB = await apiFetch('/emprestimos');
+      applyFilters();
+    } catch(err) {}
+  }, 5000);
 
   // Filters
   document.getElementById('search-input').addEventListener('input',  applyFilters);
@@ -204,7 +205,8 @@ function initDashboard() {
       if (note.status === 'reservado') {
         if (confirm(`Deseja LIBERAR o ${id}? Ele voltará para Guardado.`)) {
           note.status='guardado'; note.observacao=''; note.updatedAt=new Date().toISOString();
-          await setDoc(doc(db,'notebooks',id), note);
+          await apiFetch(`/emprestimos/${id}`, { method: 'PUT', body: JSON.stringify(note) });
+          applyFilters(); // Atualiza UI rapidamente
         }
       } else {
         document.getElementById('reserva-notebook-id').value = id;
@@ -227,7 +229,8 @@ function initDashboard() {
     const note   = notebooksDB.find(n => n.id === id);
     if (!note) return;
     note.status='reservado'; note.observacao=motivo; note.updatedAt=new Date().toISOString();
-    await setDoc(doc(db,'notebooks',id), note);
+    await apiFetch(`/emprestimos/${id}`, { method: 'PUT', body: JSON.stringify(note) });
+    applyFilters();
     fecharModalReserva();
   });
 
@@ -435,10 +438,14 @@ function initMovimentar() {
 
   updateHeader(noteObj);
 
-  // Realtime listener
-  onSnapshot(doc(db,'notebooks',notebookId), snap => {
-    if (snap.exists()) { noteObj = snap.data(); updateHeader(noteObj); }
-  });
+  // Polling listener via API para o equipamento atual (Reduzido para economizar recursos do servidor)
+  setInterval(async () => {
+    try {
+      const data = await apiFetch(`/emprestimos/${notebookId}`);
+      noteObj = data; 
+      updateHeader(noteObj);
+    } catch(err) {}
+  }, 30000);
 
   // Dynamic fields
   const radios   = document.querySelectorAll('input[name="status"]');
@@ -498,9 +505,7 @@ function initMovimentar() {
     }
     if (status==='cedido')     { noteObj.funcionario=fd.get('funcionario'); noteObj.setor=fd.get('setor'); sumHtml+=`Funcionário: <b>${noteObj.funcionario}</b><br>Setor: <b>${noteObj.setor}</b>`; }
 
-    await setDoc(doc(db,'notebooks',noteObj.id), noteObj);
-
-    await setDoc(doc(db,'notebooks',noteObj.id), noteObj);
+    await apiFetch(`/emprestimos/${noteObj.id}`, { method: 'PUT', body: JSON.stringify(noteObj) });
 
     btn.textContent='Confirmar Mudança'; btn.disabled=false;
     

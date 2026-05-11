@@ -1,9 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
-import { 
-  getFirestore, doc, getDoc, setDoc, updateDoc, collection, 
-  onSnapshot, query, orderBy, where, deleteDoc, serverTimestamp 
-} from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
 import { firebaseConfig } from "../core/firebase-config.js";
 import { setupLayout } from "../core/layout.js";
@@ -12,7 +8,25 @@ import { secureAction, sanitizeHTML, escapeHTML as esc } from "../core/security.
 
 const fbApp = initializeApp(firebaseConfig);
 const auth  = getAuth(fbApp);
-const db    = getFirestore(fbApp);
+
+const API_BASE = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') 
+  ? 'http://localhost:3000/api' 
+  : '/api';
+
+async function apiFetch(endpoint, options = {}) {
+  const token = await currentUser.getIdToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    ...(options.headers || {})
+  };
+  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Erro na API: ${res.status}`);
+  }
+  return res.json();
+}
 
 let currentUser = null;
 let currentRole = null;
@@ -23,9 +37,10 @@ let currentRole = null;
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     currentUser = user;
-    const snap = await getDoc(doc(db, 'users', user.uid));
-    currentRole = 'ti';
-    if (snap.exists()) currentRole = snap.data().role || 'ti';
+    try {
+      const userData = await apiFetch('/usuarios/me');
+      currentRole = userData.role || 'ti';
+    } catch(e) { currentRole = 'visitante'; }
 
     initApp(user, currentRole);
   } else {
@@ -66,8 +81,10 @@ async function renderWidgets(role) {
   if (modules.includes('usuarios') && (role === 'adm_l1' || role === 'adm_l2')) {
     const card = createWidgetCard('👥', 'Usuários Ativos', '...', 'usuarios');
     container.appendChild(card);
-    const snap = await getDocs(collection(db, 'users'));
-    card.querySelector('.widget-value').textContent = snap.size;
+    try {
+      const users = await apiFetch('/usuarios');
+      card.querySelector('.widget-value').textContent = users.length;
+    } catch(e) { card.querySelector('.widget-value').textContent = '-'; }
   }
 
   // Widget Ensalamento
@@ -108,19 +125,28 @@ function createWidgetCard(icon, label, value, modId) {
 // ================================================================
 function setupNotes() {
   const notesGrid = document.getElementById('notes-grid');
-  const notesRef = collection(db, 'users', currentUser.uid, 'notes');
-  // Simplificar consulta para evitar erro de índice composto
-  const q = query(notesRef, orderBy('createdAt', 'desc'));
+  
+  async function loadNotes() {
+    try {
+      const allNotes = await apiFetch('/meu-espaco/notes');
+      notesGrid.innerHTML = '';
+      if (allNotes.length === 0) {
+        notesGrid.innerHTML = '<div class="loading-state">Nenhuma nota criada. Que tal começar agora?</div>';
+        return;
+      }
+      
+      // Ordenar manualmente: Pinned primeiro
+      allNotes.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+      renderNotes(allNotes, notesGrid);
+    } catch(err) { console.error(err); }
+  }
 
-  onSnapshot(q, (snap) => {
-    notesGrid.innerHTML = '';
-    if (snap.empty) {
-      notesGrid.innerHTML = '<div class="loading-state">Nenhuma nota criada. Que tal começar agora?</div>';
-      return;
-    }
+  setInterval(loadNotes, 30000);
+  loadNotes();
+  window.loadNotes = loadNotes; // Expose to global for refresh after save
+}
 
-    const allNotes = [];
-    snap.forEach(docSnap => allNotes.push({ id: docSnap.id, ...docSnap.data() }));
+function renderNotes(allNotes, notesGrid) {
 
     // Ordenar manualmente: Pinned primeiro
     allNotes.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
@@ -165,7 +191,6 @@ function setupNotes() {
 
       notesGrid.appendChild(card);
     });
-  });
 }
 
 async function saveNote(e) {
@@ -181,23 +206,23 @@ async function saveNote(e) {
   const noteData = {
     title,
     text,
-    color,
-    updatedAt: serverTimestamp()
+    color
   };
 
   try {
     await secureAction(currentUser.uid, async () => {
       if (id) {
-        await updateDoc(doc(db, 'users', currentUser.uid, 'notes', id), noteData);
+        await apiFetch(`/meu-espaco/notes/${id}`, { method: 'PUT', body: JSON.stringify(noteData) });
       } else {
         noteData.pinned = false;
         noteData.x = 20 + (Math.random() * 50);
         noteData.y = 20 + (Math.random() * 50);
-        noteData.createdAt = serverTimestamp();
-        await setDoc(doc(collection(db, 'users', currentUser.uid, 'notes')), noteData);
+        await apiFetch('/meu-espaco/notes', { method: 'POST', body: JSON.stringify(noteData) });
       }
     });
     fecharModal('modal-note');
+    if (window.loadNotes) window.loadNotes();
+
   } catch (err) {
     if (err.message.includes("Rate limit")) return; // Alerta já mostrado pelo security.js
     alert("Erro ao salvar nota: " + err.message);
@@ -250,7 +275,7 @@ function setupDraggable(el, id) {
 
     try {
       await secureAction(currentUser.uid, async () => {
-        await updateDoc(doc(db, 'users', currentUser.uid, 'notes', id), { x, y });
+        await apiFetch(`/meu-espaco/notes/${id}`, { method: 'PUT', body: JSON.stringify({ x, y }) });
       });
     } catch (err) {
       console.error("Erro ao salvar posição:", err);
@@ -259,12 +284,14 @@ function setupDraggable(el, id) {
 }
 
 async function togglePinNote(id, current) {
-  await updateDoc(doc(db, 'users', currentUser.uid, 'notes', id), { pinned: !current });
+  await apiFetch(`/meu-espaco/notes/${id}`, { method: 'PUT', body: JSON.stringify({ pinned: !current }) });
+  if (window.loadNotes) window.loadNotes();
 }
 
 async function deleteNote(id) {
   if (confirm("Deseja excluir esta nota?")) {
-    await deleteDoc(doc(db, 'users', currentUser.uid, 'notes', id));
+    await apiFetch(`/meu-espaco/notes/${id}`, { method: 'DELETE' });
+    if (window.loadNotes) window.loadNotes();
   }
 }
 
@@ -298,27 +325,31 @@ function setupNotices(role) {
   const noticesList = document.getElementById('notices-list');
   const btnManage = document.getElementById('btn-new-notice');
   
-  // Liberar para N1 e N2
   const canManage = (role === 'adm_l1' || role === 'adm_l2');
   if (canManage) btnManage.classList.remove('hidden');
 
-  const noticesRef = collection(db, 'notices');
-  // Simplificar consulta para evitar erro de índice composto
-  const q = query(noticesRef, orderBy('createdAt', 'desc'));
+  async function loadNotices() {
+    try {
+      const allNotices = await apiFetch('/meu-espaco/notices');
+      noticesList.innerHTML = '';
+      
+      const activeNotices = allNotices.filter(n => n.active !== false);
 
-  onSnapshot(q, (snap) => {
-    noticesList.innerHTML = '';
-    
-    const activeNotices = [];
-    snap.forEach(docSnap => {
-      const data = docSnap.data();
-      if (data.active) activeNotices.push({ id: docSnap.id, ...data });
-    });
+      if (activeNotices.length === 0) {
+        noticesList.innerHTML = '<div class="loading-state">Nenhum aviso no momento.</div>';
+        return;
+      }
+      
+      renderNotices(activeNotices, noticesList, canManage);
+    } catch(err) { console.error(err); }
+  }
 
-    if (activeNotices.length === 0) {
-      noticesList.innerHTML = '<div class="loading-state">Nenhum aviso no momento.</div>';
-      return;
-    }
+  setInterval(loadNotices, 30000);
+  loadNotices();
+  window.loadNotices = loadNotices;
+}
+
+function renderNotices(activeNotices, noticesList, canManage) {
 
     activeNotices.forEach(notice => {
       const id = notice.id;
@@ -345,7 +376,6 @@ function setupNotices(role) {
 
       noticesList.appendChild(card);
     });
-  });
 }
 
 async function saveNotice(e) {
@@ -357,19 +387,17 @@ async function saveNotice(e) {
 
   const data = {
     title, message, priority,
-    active: true,
-    updatedAt: serverTimestamp(),
-    createdBy: currentUser.uid
+    active: true
   };
 
   try {
     if (id) {
-      await updateDoc(doc(db, 'notices', id), data);
+      await apiFetch(`/meu-espaco/notices/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     } else {
-      data.createdAt = serverTimestamp();
-      await setDoc(doc(collection(db, 'notices')), data);
+      await apiFetch('/meu-espaco/notices', { method: 'POST', body: JSON.stringify(data) });
     }
     fecharModal('modal-notice');
+    if (window.loadNotices) window.loadNotices();
   } catch (err) {
     alert("Erro ao salvar aviso: " + err.message);
   }
@@ -378,7 +406,8 @@ async function saveNotice(e) {
 async function deleteNotice(id, title) {
   if (confirm(`Deseja excluir permanentemente o aviso "${title}"?`)) {
     try {
-      await deleteDoc(doc(db, 'notices', id));
+      await apiFetch(`/meu-espaco/notices/${id}`, { method: 'DELETE' });
+      if (window.loadNotices) window.loadNotices();
     } catch (err) {
       alert("Erro ao excluir: " + err.message);
     }
@@ -410,7 +439,4 @@ window.abrirModal = (id) => document.getElementById(id).classList.add('active');
 window.fecharModal = (id) => document.getElementById(id).classList.remove('active');
 
 
-async function getDocs(colRef) {
-  const { getDocs: getDocsOrig } = await import("https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js");
-  return await getDocsOrig(colRef);
-}
+
