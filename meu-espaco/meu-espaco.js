@@ -2,7 +2,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebas
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 
 import { setupLayout, getCachedAuth, setCachedAuth, clearCachedAuth } from "../core/layout.js";
+import { firebaseConfig } from "../core/firebase-config.js";
 import { getRoleConfig } from "../core/permissions.js";
+
 import { secureAction, sanitizeHTML, escapeHTML as esc } from "../core/security.js";
 
 const fbApp = initializeApp(firebaseConfig);
