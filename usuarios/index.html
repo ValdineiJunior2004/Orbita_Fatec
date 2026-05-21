@@ -181,78 +181,85 @@
 
   <!-- Modal: Editar Usuário -->
   <div class="modal-overlay" id="modal-editar">
-    <div class="modal-box">
+    <div class="modal-box modal-box-large">
       <div class="modal-header">
-        <h3 class="modal-title">Editar Usuário</h3>
+        <div class="modal-header-left">
+          <h3 class="modal-title">Editar Usuário</h3>
+          <p class="edit-user-name" id="edit-user-name"></p>
+        </div>
         <button class="modal-close" id="btn-fechar-editar">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
 
-      <p class="edit-user-name" id="edit-user-name"></p>
       <input type="hidden" id="edit-uid">
       <input type="hidden" id="edit-email">
 
-      <!-- Seção: Nível de Acesso -->
-      <div class="edit-section">
-        <div class="edit-section-label">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          Nível de Acesso
-        </div>
-        
-        <div class="role-selector" id="edit-role-options">
-          <!-- Gerado dinamicamente via JS -->
-        </div>
+      <div class="edit-modal-grid">
+        <!-- Coluna Esquerda: Nível de Acesso -->
+        <div class="edit-modal-col">
+          <div class="edit-section">
+            <div class="edit-section-label">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Nível de Acesso
+            </div>
+            
+            <div class="role-selector" id="edit-role-options">
+              <!-- Gerado dinamicamente via JS -->
+            </div>
 
-        <button class="btn btn-primary btn-save-role" id="btn-salvar-role" style="margin-top:1.5rem; width:100%">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          Salvar Alterações
-        </button>
-      </div>
-
-      <div class="edit-divider"></div>
-
-      <!-- Seção: Status no Clube de Vantagens -->
-      <div class="edit-section">
-        <div class="edit-section-label">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-          Clube de Vantagens
-        </div>
-
-        <div class="pw-option" style="align-items: center;">
-          <div class="pw-option-info">
-            <strong>Funcionário Ativo</strong>
-            <small>Se desativado, o QR Code de parceiros será bloqueado.</small>
+            <button class="btn btn-primary btn-save-role" id="btn-salvar-role" style="margin-top: 1.5rem; width: 100%">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Salvar Alterações
+            </button>
           </div>
-          <label class="switch">
-            <input type="checkbox" id="edit-status-ativo">
-            <span class="slider round"></span>
-          </label>
-        </div>
-      </div>
-
-      <div class="edit-divider"></div>
-
-      <!-- Seção: Segurança -->
-      <div class="edit-section">
-        <div class="edit-section-label">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          Segurança da Conta
         </div>
 
-        <div class="pw-option">
-          <div class="pw-option-info">
-            <strong>Redefinir Senha</strong>
-            <small>Envia link de nova senha por e-mail.</small>
+        <!-- Coluna Direita: Outras Configurações -->
+        <div class="edit-modal-col">
+          <!-- Seção: Status no Clube de Vantagens -->
+          <div class="edit-section">
+            <div class="edit-section-label">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+              Clube de Vantagens
+            </div>
+
+            <div class="pw-option" style="align-items: center; margin-bottom: 0;">
+              <div class="pw-option-info">
+                <strong>Funcionário Ativo</strong>
+                <small>Se desativado, o QR Code de parceiros será bloqueado.</small>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="edit-status-ativo">
+                <span class="slider round"></span>
+              </label>
+            </div>
           </div>
-          <button class="btn btn-outline-purple" id="btn-send-reset">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-            Enviar E-mail
-          </button>
+
+          <div class="edit-divider-inner"></div>
+
+          <!-- Seção: Segurança -->
+          <div class="edit-section">
+            <div class="edit-section-label">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Segurança da Conta
+            </div>
+
+            <div class="pw-option" style="margin-bottom: 0;">
+              <div class="pw-option-info">
+                <strong>Redefinir Senha</strong>
+                <small>Envia link de nova senha por e-mail.</small>
+              </div>
+              <button class="btn btn-outline-purple" id="btn-send-reset">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                Enviar E-mail
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="modal-actions" style="margin-top:2rem">
+      <div class="modal-actions" style="margin-top: 1rem">
         <button class="btn btn-secondary" id="btn-cancelar-editar" style="width:100%">Fechar Janela</button>
       </div>
     </div>

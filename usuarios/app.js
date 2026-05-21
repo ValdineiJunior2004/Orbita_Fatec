@@ -280,16 +280,21 @@ function updateRoleSelects() {
     default: 'Cargo Personalizado'
   };
 
-  const renderRoleOption = (r, nameAttr) => `
-    <label class="role-option">
-      <input type="radio" name="${nameAttr}" value="${r.id}" required>
-      <div class="role-card">
-        <span class="role-icon">${roleIcons[r.id] || roleIcons.default}</span>
-        <strong>${esc(r.name)}</strong>
-        <small>${roleDescs[r.id] || roleDescs.default}</small>
-      </div>
-    </label>
-  `;
+  const renderRoleOption = (r, nameAttr) => {
+    const parts = r.name.split(' - ');
+    const displayName = parts[0];
+    const displayDesc = parts[1] || roleDescs[r.id] || roleDescs.default;
+    return `
+      <label class="role-option">
+        <input type="radio" name="${nameAttr}" value="${r.id}" required>
+        <div class="role-card">
+          <span class="role-icon">${roleIcons[r.id] || roleIcons.default}</span>
+          <strong>${esc(displayName)}</strong>
+          <small>${esc(displayDesc)}</small>
+        </div>
+      </label>
+    `;
+  };
 
   // Update Role options in Create User Modal
   const roleRadios = document.getElementById('novo-role-options');
@@ -524,7 +529,7 @@ function abrirModalEditar(uid, name, role, email) {
 
   document.getElementById('edit-uid').value         = uid;
   document.getElementById('edit-email').value       = email || '';
-  document.getElementById('edit-user-name').textContent = `👤 ${name} ${email ? '· ' + email : ''}`;
+  document.getElementById('edit-user-name').textContent = `${name} (${email || ''})`;
   
   // Set role
   const radio = document.querySelector(`input[name="edit-role"][value="${role}"]`);
