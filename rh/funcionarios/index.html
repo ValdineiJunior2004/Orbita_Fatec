@@ -56,7 +56,7 @@
 
   <!-- ===================== MODAL: FUNCIONÁRIO ===================== -->
   <div class="modal-overlay hidden" id="modal-func">
-    <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-content" style="max-width: 650px;">
       <div class="modal-header">
         <h3 id="modal-func-titulo">Novo Funcionário</h3>
         <button class="modal-close" id="btn-fechar-modal-func">
@@ -67,14 +67,28 @@
       <form id="form-func">
         <input type="hidden" id="func-edit-id">
 
-        <div class="form-group">
-          <label>Nome completo *</label>
-          <input type="text" id="func-nome" placeholder="Ex: Maria Aparecida Silva" required>
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div class="form-group">
+            <label>Nome completo *</label>
+            <input type="text" id="func-nome" placeholder="Ex: Maria Aparecida Silva" required>
+          </div>
+
+          <div class="form-group">
+            <label>Cargo *</label>
+            <input type="text" id="func-cargo" placeholder="Ex: Secretária, Coordenador..." required>
+          </div>
         </div>
 
-        <div class="form-group">
-          <label>Cargo *</label>
-          <input type="text" id="func-cargo" placeholder="Ex: Secretária, Coordenador..." required>
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; margin-bottom: 16px;">
+          <div class="form-group">
+            <label>E-mail *</label>
+            <input type="email" id="func-email" placeholder="Ex: maria.silva@fatec.sp.gov.br" required>
+          </div>
+
+          <div class="form-group">
+            <label>Data de Nascimento *</label>
+            <input type="date" id="func-nascimento" required>
+          </div>
         </div>
 
         <div class="form-group">
@@ -88,7 +102,6 @@
                 <div class="turno-toggle-box">
                   <svg class="turno-check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
-                <span class="turno-emoji">🌅</span>
                 <span class="turno-nome">Manhã</span>
               </label>
               <div class="turno-horarios hidden" id="horarios-manha">
@@ -107,7 +120,6 @@
                 <div class="turno-toggle-box">
                   <svg class="turno-check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
-                <span class="turno-emoji">☀️</span>
                 <span class="turno-nome">Tarde</span>
               </label>
               <div class="turno-horarios hidden" id="horarios-tarde">
@@ -126,7 +138,6 @@
                 <div class="turno-toggle-box">
                   <svg class="turno-check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
-                <span class="turno-emoji">🌙</span>
                 <span class="turno-nome">Noite</span>
               </label>
               <div class="turno-horarios hidden" id="horarios-noite">

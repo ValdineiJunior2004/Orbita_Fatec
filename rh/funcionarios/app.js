@@ -189,6 +189,14 @@ function renderFuncionarios(lista) {
         ).join('')
       : `<span class="func-badge func-badge-turno">${TURNO_LABEL[f.turno]||f.turno} · ${f.horasTurno||0}h</span>`;
 
+    let dataNascStr = '';
+    if (f.nascimento) {
+      const parts = f.nascimento.split('-');
+      if (parts.length === 3) {
+        dataNascStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    }
+
     return `
     <div class="func-card">
       <div class="func-avatar">${esc(f.nome.charAt(0).toUpperCase())}</div>
@@ -196,6 +204,8 @@ function renderFuncionarios(lista) {
         <div class="func-nome">${esc(f.nome)}</div>
         <div class="func-meta">
           <span class="func-badge func-badge-cargo">${esc(f.cargo)}</span>
+          ${f.email ? `<span class="func-badge func-badge-email">${esc(f.email)}</span>` : ''}
+          ${dataNascStr ? `<span class="func-badge" style="background: rgba(249, 115, 22, 0.1); color: var(--ch-orange); border-color: rgba(249, 115, 22, 0.2);">${esc(dataNascStr)}</span>` : ''}
           ${turnosBadges}
         </div>
       </div>
@@ -333,6 +343,8 @@ function abrirModalEditar(id) {
   document.getElementById('modal-func-titulo').textContent = 'Editar Funcionário';
   document.getElementById('func-nome').value = f.nome;
   document.getElementById('func-cargo').value = f.cargo;
+  document.getElementById('func-email').value = f.email || '';
+  document.getElementById('func-nascimento').value = f.nascimento || '';
   resetarTurnos();
 
   // Restaura turnos
@@ -356,6 +368,8 @@ async function salvarFuncionario(e) {
   e.preventDefault();
   const nome    = document.getElementById('func-nome').value.trim();
   const cargo   = document.getElementById('func-cargo').value.trim();
+  const email   = document.getElementById('func-email').value.trim();
+  const nascimento = document.getElementById('func-nascimento').value;
   const errEl   = document.getElementById('func-form-error');
   const btnText = document.getElementById('func-btn-text');
 
@@ -383,7 +397,7 @@ async function salvarFuncionario(e) {
   }
 
   btnText.textContent = 'Salvando...';
-  const dados = { nome, cargo, turnos, horasTurno: Math.round(horasTurno * 100) / 100 };
+  const dados = { nome, cargo, email, nascimento, turnos, horasTurno: Math.round(horasTurno * 100) / 100 };
 
   try {
     if (editingFuncId) {
