@@ -26,8 +26,11 @@ const verifyToken = async (req, res, next) => {
         req.user.role = userDoc.exists ? userDoc.data().role : 'visitante';
         
         // Se for um endpoint perigoso de /usuarios e não for ADM, bloqueia na hora!
-        // AVISO: Liberar /usuarios/me para que o próprio usuário possa buscar sua role.
-        if (req.baseUrl.includes('/usuarios') && !req.path.startsWith('/me') && req.user.role !== 'adm_l1' && req.user.role !== 'adm_l2') {
+        // AVISO: Liberar /usuarios/me e GET /usuarios/config/permissions para que usuários possam buscar suas credenciais e permissões.
+        const isSelfInfo = req.path.startsWith('/me');
+        const isGetPermissions = req.path.startsWith('/config/permissions') && req.method === 'GET';
+
+        if (req.baseUrl.includes('/usuarios') && !isSelfInfo && !isGetPermissions && req.user.role !== 'adm_l1' && req.user.role !== 'adm_l2') {
              return res.status(403).json({ error: 'Acesso Negado. Você não tem privilégios de Administrador.' });
         }
 

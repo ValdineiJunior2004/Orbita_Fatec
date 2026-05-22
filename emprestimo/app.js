@@ -411,7 +411,12 @@ function abrirQR(id) {
   if (label) label.textContent = id;
   const container = document.getElementById('qr-code-canvas');
   container.innerHTML = '';
-  const base = window.location.href.split('emprestimo/')[0];
+  
+  let base = window.location.href.split('emprestimo/')[0];
+  if (window.location.hostname.endsWith('vercel.app')) {
+    base = 'https://orbita-fatec-ti.vercel.app/';
+  }
+  
   const url  = `${base}emprestimo/movimentar.html?id=${id}`;
   new QRCode(container, { text:url, width:200, height:200, correctLevel: QRCode.CorrectLevel.H });
   document.getElementById('qr-modal').classList.add('active');
@@ -573,7 +578,22 @@ window.abrirScanner = function() {
     (decoded) => {
       if (decoded.includes('id=')) {
         pararScanner();
-        window.location.href = decoded;
+        let notebookId = null;
+        try {
+          const urlObj = new URL(decoded);
+          notebookId = urlObj.searchParams.get('id');
+        } catch (e) {
+          const match = decoded.match(/[?&]id=([^&]+)/);
+          if (match && match[1]) {
+            notebookId = match[1];
+          }
+        }
+
+        if (notebookId) {
+          window.location.href = `/emprestimo/movimentar.html?id=${notebookId}`;
+        } else {
+          window.location.href = decoded;
+        }
       } else {
         alert('QR Code inválido: ' + decoded);
       }
