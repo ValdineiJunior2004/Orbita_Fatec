@@ -26,11 +26,15 @@
       <div class="layout-content">
         <main class="mod-main" id="emprestimo-main-section" style="max-width: 500px; margin: 0 auto; padding-top: 2rem;">
           
-          <div style="margin-bottom: 2rem;">
+          <div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
             <a href="index.html" style="display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: 0.2s;" onmouseover="this.style.color='var(--primary-blue)'" onmouseout="this.style.color='var(--text-secondary)'">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
               Voltar ao Dashboard
             </a>
+            <button onclick="abrirScanner()" class="btn-scan-qr action-execute" style="flex-shrink: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem; background: linear-gradient(135deg, var(--secondary-blue), var(--primary-blue)); border: none; border-radius: 10px; color: white; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 12px rgba(15, 78, 184, 0.25);">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <span>Escanear Outro</span>
+            </button>
           </div>
 
           <!-- Info Card do Notebook -->
@@ -111,7 +115,15 @@
       </div>
       <h2 style="margin-bottom:0.5rem; font-weight: 800;">Concluído!</h2>
       <p style="color:var(--text-secondary); margin-bottom:2rem; font-weight: 500;">A situação do equipamento foi atualizada no banco de dados.</p>
-      <button class="btn btn-secondary" onclick="window.location.href='/emprestimo/index.html'" style="width:100%; padding: 1rem; border-radius: 12px; border: 1px solid var(--border-color); background: white; color: var(--text-main); font-weight: 700; cursor: pointer;">Voltar ao Início</button>
+      <button class="btn btn-primary" onclick="fecharModalESair()" style="width:100%">Voltar ao Início</button>
+    </div>
+  </div>
+
+  <div id="scanner-modal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>Escanear QR</h3>
+      <div id="reader" style="width:100%"></div>
+      <button class="btn btn-secondary" onclick="fecharScanner()" style="width:100%; margin-top:1rem">Fechar</button>
     </div>
   </div>
 

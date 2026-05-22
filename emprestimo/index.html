@@ -56,8 +56,8 @@
 
           <!-- Toolbar e Filtros -->
           <div class="toolbar-container">
-            <div class="toolbar-top">
-              <div class="search-box">
+            <div class="toolbar-top" style="display: flex; gap: 1rem; align-items: center; width: 100%;">
+              <div class="search-box" style="flex: 1;">
                 <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   stroke-width="2">
                   <circle cx="11" cy="11" r="8" />
@@ -65,6 +65,10 @@
                 </svg>
                 <input type="text" id="search-input" class="search-input" placeholder="Buscar notebook (ex: Not_Med01)">
               </div>
+              <button onclick="abrirScanner()" class="btn-scan-qr action-execute" style="flex-shrink: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.8rem 1.2rem; background: linear-gradient(135deg, var(--secondary-blue), var(--primary-blue)); border: none; border-radius: 12px; color: white; font-weight: 700; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 15px rgba(15, 78, 184, 0.25);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span>Escanear QR</span>
+              </button>
             </div>
 
             <div class="filters-row">

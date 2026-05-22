@@ -513,3 +513,16 @@ body {
     padding: 1.5rem;
   }
 }
+
+.btn-scan-qr {
+  transition: transform 0.2s, box-shadow 0.2s !important;
+}
+
+.btn-scan-qr:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(15, 78, 184, 0.4) !important;
+}
+
+.btn-scan-qr:active {
+  transform: translateY(0);
+}

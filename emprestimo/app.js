@@ -576,24 +576,15 @@ window.abrirScanner = function() {
     { facingMode:'environment' },
     { fps:10, qrbox:{ width:240, height:240 } },
     (decoded) => {
-      if (decoded.includes('id=')) {
+      const match = decoded.match(/Not_Med\d+/i);
+      if (match) {
         pararScanner();
-        let notebookId = null;
-        try {
-          const urlObj = new URL(decoded);
-          notebookId = urlObj.searchParams.get('id');
-        } catch (e) {
-          const match = decoded.match(/[?&]id=([^&]+)/);
-          if (match && match[1]) {
-            notebookId = match[1];
-          }
+        let notebookId = match[0];
+        // Normaliza o case para "Not_MedXX" padrão
+        if (notebookId.toLowerCase().startsWith('not_med')) {
+          notebookId = 'Not_Med' + notebookId.substring(7);
         }
-
-        if (notebookId) {
-          window.location.href = `/emprestimo/movimentar.html?id=${notebookId}`;
-        } else {
-          window.location.href = decoded;
-        }
+        window.location.href = `/emprestimo/movimentar.html?id=${notebookId}`;
       } else {
         alert('QR Code inválido: ' + decoded);
       }
