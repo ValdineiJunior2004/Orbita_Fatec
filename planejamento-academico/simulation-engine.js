@@ -12,7 +12,7 @@ const DEFAULT_WEIGHTS = {
   balancedWeekBonus: 30,
   overloadedDayPenalty: -40,
   eadDistributionBonus: 15,
-  idealDistributionBonus: 25 // 3 presencial, 2 EAD/Protegida
+  idealDistributionBonus: 25 // Todas as disciplinas alocadas
 };
 
 export class SimulationEngine {
@@ -79,9 +79,17 @@ export class SimulationEngine {
     return !localConflict;
   }
 
-  areClassesAvailable(classIds, weekday, periods, localAllocations = []) {
-    // Verificar globalmente
+  areClassesAvailable(classIds, weekday, periods, localAllocations = [], currentClassType = 'presencial') {
+    // Aulas do tipo Carga Reservada não são bloqueantes (não ocupam slot do dia/período)
+    const currentIsBlocking = currentClassType === 'presencial' || currentClassType === 'ead';
+    if (!currentIsBlocking) return true;
+
+    // Verificar globalmente: apenas se o lançamento existente for bloqueante (presencial ou ead)
     const globalConflict = this.existingEntries.some(entry => {
+      const entryType = entry.classType || 'presencial';
+      const entryIsBlocking = entryType === 'presencial' || entryType === 'ead';
+      if (!entryIsBlocking) return false;
+      
       if (entry.weekday !== weekday) return false;
       const entryClassIds = entry.classIds || [entry.classId];
       if (!entryClassIds.some(id => classIds.includes(id))) return false;
@@ -91,11 +99,13 @@ export class SimulationEngine {
 
     if (globalConflict) return false;
 
-    // Verificar localmente
+    // Verificar localmente: apenas se o lançamento alocado localmente for bloqueante (presencial ou ead)
     const localConflict = localAllocations.some(alloc => {
+      const allocType = alloc.classType || 'presencial';
+      const allocIsBlocking = allocType === 'presencial' || allocType === 'ead';
+      if (!allocIsBlocking) return false;
+      
       if (alloc.weekday !== weekday) return false;
-      // Note: No motor atual, assumimos que as aulas passadas para alocar são para o MESMO grupo de turmas.
-      // Se houvesse múltiplas turmas diferentes na mesma simulação, precisaríamos checar classIds aqui.
       return alloc.periods.some(p => periods.includes(p));
     });
 
@@ -157,7 +167,7 @@ export class SimulationEngine {
 
     for (const day of weekdays) {
       // Validar se as turmas estão livres neste dia/períodos
-      if (!this.areClassesAvailable(classIds, day, lesson.periods, localAllocations)) continue;
+      if (!this.areClassesAvailable(classIds, day, lesson.periods, localAllocations, lesson.classType)) continue;
 
       // Penalidade de gargalo se o dia estiver sobrecarregado
       let bottleneckPenalty = 0;
@@ -238,19 +248,21 @@ export class SimulationEngine {
     const reasons = [];
     const warnings = [];
 
-    const unallocated = allocations.filter(a => !a.weekday).length;
-    if (unallocated > 0) {
-      score += (unallocated * this.weights.unallocatedPenalty);
-      warnings.push(`${unallocated} aula(s) sem espaço na agenda`);
+    // Apenas aulas presenciais e EAD (que são bloqueantes) devem ser obrigatoriamente alocadas.
+    // Carga Reservada não precisa ocupar lugar e pode ficar sem dia.
+    const unallocatedBlocking = allocations.filter(a => (a.classType === 'presencial' || a.classType === 'ead') && !a.weekday).length;
+    if (unallocatedBlocking > 0) {
+      score += (unallocatedBlocking * this.weights.unallocatedPenalty);
+      warnings.push(`${unallocatedBlocking} aula(s) sem espaço na agenda`);
     }
 
     const presencialAllocs = allocations.filter(a => a.classType === 'presencial' && a.weekday !== null);
     const nonPresencialAllocs = allocations.filter(a => a.classType !== 'presencial' && a.weekday !== null);
 
-    // Regra: 3 presenciais, 2 EAD/Protegida (Padrão Institucional)
-    if (presencialAllocs.length === 3 && nonPresencialAllocs.length === 2) {
+    // Regra: Todas as disciplinas da matriz foram alocadas com sucesso
+    if (unallocated === 0) {
       score += this.weights.idealDistributionBonus;
-      reasons.push("Segue o padrão institucional (3 presenciais / 2 EAD)");
+      reasons.push("Todas as disciplinas da matriz foram alocadas com sucesso");
     }
 
     // Regra: Mesma sala a semana toda
@@ -284,11 +296,10 @@ export class SimulationEngine {
       preferredRoomId: null
     };
 
-    // Priorizar aulas presenciais para garantir salas
+    // Priorizar aulas na ordem: presencial -> ead -> carga_reservada
     const sortedLessons = [...lessons].sort((a, b) => {
-      if (a.classType === 'presencial' && b.classType !== 'presencial') return -1;
-      if (a.classType !== 'presencial' && b.classType === 'presencial') return 1;
-      return 0;
+      const priority = { presencial: 1, ead: 2, carga_reservada: 3 };
+      return (priority[a.classType] || 4) - (priority[b.classType] || 4);
     });
 
     for (const lesson of sortedLessons) {
@@ -331,7 +342,10 @@ export class SimulationEngine {
     if (totalScore >= 150) status = 'ideal';
     else if (totalScore < 50) status = 'atencao';
     
-    if (allocations.some(a => !a.weekday) || (allocations.some(a => a.classType === 'presencial' && !a.suggestedRoomId))) {
+    const hasUnallocatedBlocking = allocations.some(a => (a.classType === 'presencial' || a.classType === 'ead') && !a.weekday);
+    const hasPresencialWithoutRoom = allocations.some(a => a.classType === 'presencial' && !a.suggestedRoomId);
+    
+    if (hasUnallocatedBlocking || hasPresencialWithoutRoom) {
       status = 'inviavel';
     }
 

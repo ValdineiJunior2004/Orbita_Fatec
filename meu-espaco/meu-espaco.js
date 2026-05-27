@@ -192,7 +192,9 @@ function setupNotes() {
     } catch(err) { console.error(err); }
   }
 
-  setInterval(loadNotes, 30000);
+  setInterval(() => {
+    if (!document.hidden) loadNotes();
+  }, 120000);
   loadNotes();
   window.loadNotes = loadNotes; // Expose to global for refresh after save
 }
@@ -395,7 +397,9 @@ function setupNotices(role) {
     } catch(err) { console.error(err); }
   }
 
-  setInterval(loadNotices, 30000);
+  setInterval(() => {
+    if (!document.hidden) loadNotices();
+  }, 120000);
   loadNotices();
   window.loadNotices = loadNotices;
 }

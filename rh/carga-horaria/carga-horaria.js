@@ -100,7 +100,9 @@ const Timestamp = { fromDate: (date) => ({ toDate: () => date }) };
 const onSnapshot = (path, callback) => {
     const fetchIt = () => getDocs(path).then(callback).catch(()=>{});
     fetchIt();
-    const interval = setInterval(fetchIt, 30000);
+    const interval = setInterval(() => {
+        if (!document.hidden) fetchIt();
+    }, 120000);
     return () => clearInterval(interval);
 };
 

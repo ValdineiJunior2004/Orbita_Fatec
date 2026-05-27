@@ -27,7 +27,7 @@ router.get('/custom/calendarEntries', verifyToken, verifyToken.requireModulePerm
 
 router.post('/custom/checkConflict', verifyToken, verifyToken.requireModulePermission('ensalamento'), async (req, res) => {
     try {
-        const { weekday, periods, roomId, classId, excludeId } = req.body;
+        const { weekday, periods, roomId, classId, excludeId, classType } = req.body;
         
         const q = db.collection('calendarEntries')
                     .where('active', '==', true)
@@ -44,10 +44,22 @@ router.post('/custom/checkConflict', verifyToken, verifyToken.requireModulePermi
             if (hasPeriodOverlap) {
                 const entryClassIds = entry.classIds || [entry.classId];
                 if (entryClassIds.includes(classId)) {
-                    conflicts.push('A turma já possui aula neste período.');
+                    // Só há conflito de dia/período de aula se ambas forem bloqueantes (presencial ou ead)
+                    const entryType = entry.classType || 'presencial';
+                    const newType = classType || 'presencial';
+                    const entryIsBlocking = entryType === 'presencial' || entryType === 'ead';
+                    const newIsBlocking = newType === 'presencial' || newType === 'ead';
+                    if (entryIsBlocking && newIsBlocking) {
+                        conflicts.push('A turma já possui aula presencial ou EAD neste período.');
+                    }
                 }
                 if (roomId && entry.roomId === roomId) {
-                    conflicts.push('A sala já está ocupada neste período.');
+                    // Só há conflito de sala se ambas forem presenciais
+                    const entryType = entry.classType || 'presencial';
+                    const newType = classType || 'presencial';
+                    if (entryType === 'presencial' && newType === 'presencial') {
+                        conflicts.push('A sala já está ocupada neste período.');
+                    }
                 }
             }
         });
@@ -64,17 +76,25 @@ router.delete('/custom/disciplines', verifyToken, verifyToken.requireModulePermi
         if (!courseId) return res.status(400).json({ error: 'Falta o parâmetro courseId' });
         
         let q = db.collection('disciplines').where('courseId', '==', courseId);
-        if (matrixName) {
-            q = q.where('matrixName', '==', matrixName);
-        }
-        
         const snap = await q.get();
         const batch = db.batch();
+        let count = 0;
+        
         snap.forEach(doc => {
-            batch.delete(doc.ref);
+            const data = doc.data();
+            if (matrixName) {
+                if (data.matrixName === matrixName || data.academicPeriod === matrixName) {
+                    batch.delete(doc.ref);
+                    count++;
+                }
+            } else {
+                batch.delete(doc.ref);
+                count++;
+            }
         });
+        
         await batch.commit();
-        res.json({ message: `${snap.size} disciplinas removidas com sucesso.` });
+        res.json({ message: `${count} disciplinas removidas com sucesso.` });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

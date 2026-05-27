@@ -179,6 +179,7 @@ function initPage() {
 // ================================================================
 function loadUsers() {
   setInterval(async () => {
+    if (document.hidden) return; // Ignorar requisições se a aba estiver inativa
     try {
       const data = await apiFetch('/usuarios');
       allUsers = data;
@@ -191,7 +192,7 @@ function loadUsers() {
         renderUsers(allUsers);
       }
     } catch(e) {}
-  }, 30000);
+  }, 120000);
 
   // Primeira carga imediata
   apiFetch('/usuarios').then(data => {
@@ -212,6 +213,7 @@ function filterUsers() {
 
 function loadRoles() {
   setInterval(async () => {
+    if (document.hidden) return; // Ignorar requisições se a aba estiver inativa
     try {
       const data = await apiFetch('/usuarios/roles');
       allRoles = data;
@@ -219,7 +221,7 @@ function loadRoles() {
       renderRoles(allRoles);
       updateRoleSelects();
     } catch(e) {}
-  }, 30000);
+  }, 120000);
 
   // Primeira carga
   apiFetch('/usuarios/roles').then(async (data) => {
@@ -371,10 +373,11 @@ const ROLE_LABEL = {
 };
 
 const MODULES = [
-  { id: 'emprestimo',    name: 'Empréstimos',   icon: '📦' },
-  { id: 'usuarios',     name: 'Usuários',     icon: '👥' },
-  { id: 'ensalamento',  name: 'Ensalamento',  icon: '🏫' },
-  { id: 'carga-horaria',name: 'Carga Horária',icon: '⏰' }
+  { id: 'emprestimo',    name: 'Empréstimos',          icon: '📦' },
+  { id: 'usuarios',     name: 'Usuários',              icon: '👥' },
+  { id: 'ensalamento',  name: 'Planejamento Acadêmico', icon: '🏫' },
+  { id: 'carga-horaria',name: 'Carga Horária',         icon: '⏰' },
+  { id: 'empresas',     name: 'Parceiros',             icon: '🤝' }
 ];
 
 function renderUsers(list) {
@@ -504,8 +507,9 @@ async function salvarNovoCargo(e) {
     perms[id] = {
       emprestimo: 2,
       usuarios: 1,
-      ensalamento: 2,
-      'carga-horaria': 1
+      ensalamento: 1,
+      'carga-horaria': 1,
+      empresas: 1
     };
     await apiFetch('/usuarios/config/permissions', { method: 'PUT', body: JSON.stringify(perms) });
 

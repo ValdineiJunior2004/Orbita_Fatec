@@ -97,10 +97,10 @@ export async function getCalendarEntries(filters = {}) {
   return await apiFetch(`/ensalamento/custom/calendarEntries?${params}`);
 }
 
-export async function checkConflict(weekday, periods, roomId, classId, excludeId = null) {
+export async function checkConflict(weekday, periods, roomId, classId, excludeId = null, classType = 'presencial') {
   return await apiFetch(`/ensalamento/custom/checkConflict`, {
       method: 'POST',
-      body: JSON.stringify({ weekday, periods, roomId, classId, excludeId })
+      body: JSON.stringify({ weekday, periods, roomId, classId, excludeId, classType })
   });
 }
 

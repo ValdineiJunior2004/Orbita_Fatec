@@ -110,12 +110,82 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+const isCorruptedPeriod = (p) => /^\d{5}$|^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(p || '');
+
+async function autoCleanupCorruptedData() {
+  const corruptedClasses = classes.filter(t => isCorruptedPeriod(t.academicPeriod));
+  const corruptedDisciplines = disciplines.filter(d => isCorruptedPeriod(d.academicPeriod));
+  
+  if (corruptedClasses.length === 0 && corruptedDisciplines.length === 0) return;
+  
+  console.log(`Limpando ${corruptedClasses.length} turmas e ${corruptedDisciplines.length} disciplinas com períodos letivos corrompidos...`);
+  
+  for (const t of corruptedClasses) {
+    try {
+      await fb.remove('classes', t.id);
+    } catch (e) {
+      console.error(`Erro ao remover turma corrompida ${t.id}:`, e);
+    }
+  }
+  
+  const pairs = [];
+  const seen = new Set();
+  corruptedDisciplines.forEach(d => {
+    const key = `${d.courseId}|${d.academicPeriod}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      pairs.push({ courseId: d.courseId, period: d.academicPeriod });
+    }
+  });
+  
+  for (const pair of pairs) {
+    try {
+      await fb.clearDisciplines(pair.courseId, pair.period);
+    } catch (e) {
+      console.error(`Erro ao limpar disciplinas corrompidas para curso ${pair.courseId} e período ${pair.period}:`, e);
+    }
+  }
+  
+  console.log("Limpeza de dados corrompidos concluída.");
+}
+
 async function loadAllData() {
   courses = await fb.getActive('courses');
   classes = await fb.getActive('classes');
   rooms = await fb.getActive('rooms');
   calendarEntries = await fb.getCalendarEntries();
-  disciplines = [];
+  try {
+    disciplines = await fb.getActive('disciplines');
+  } catch (err) {
+    console.error("Erro ao carregar matrizes/disciplinas:", err);
+    disciplines = [];
+  }
+
+  // Diagnóstico adicional para entender se existem disciplinas na base
+  try {
+    const rawDisciplines = await fb.getAll('disciplines');
+    console.log("DIAGNOSTICO MATRIZ - Total no banco:", rawDisciplines.length);
+    if (rawDisciplines.length > 0) {
+      console.log("DIAGNOSTICO MATRIZ - Amostra do banco:", rawDisciplines[0]);
+    }
+    console.log("DIAGNOSTICO MATRIZ - Ativas em cache:", disciplines.length);
+  } catch (e) {
+    console.log("Erro no diagnóstico de disciplinas:", e);
+  }
+
+  // Executar limpeza automática de períodos importados incorretamente no passado
+  const hasCorrupted = classes.some(t => isCorruptedPeriod(t.academicPeriod)) || 
+                       disciplines.some(d => isCorruptedPeriod(d.academicPeriod));
+  if (hasCorrupted) {
+    await autoCleanupCorruptedData();
+    // Recarregar os dados limpos
+    classes = await fb.getActive('classes');
+    try {
+      disciplines = await fb.getActive('disciplines');
+    } catch (err) {
+      disciplines = [];
+    }
+  }
 
   updateSelects();
   updateAcademicPeriodDropdowns();
@@ -125,7 +195,9 @@ async function loadAllData() {
 }
 
 function updateAcademicPeriodDropdowns() {
-  const periods = [...new Set(classes.map(c => c.academicPeriod).filter(Boolean))].sort((a, b) => b.localeCompare(a));
+  const periodsFromClasses = classes.map(c => c.academicPeriod);
+  const periodsFromDisciplines = disciplines.map(d => d.academicPeriod);
+  const periods = [...new Set([...periodsFromClasses, ...periodsFromDisciplines].filter(Boolean))].sort((a, b) => b.localeCompare(a));
   
   const dropdownIds = ['filter-academic-period', 'filter-tab-class-academic-period', 'sim-academic-period'];
   dropdownIds.forEach(id => {
@@ -225,7 +297,7 @@ function setupEventListeners() {
   document.getElementById('btn-open-simulation').addEventListener('click', openSimulationModal);
   document.getElementById('btn-sim-add-lesson').addEventListener('click', addLessonToSimulation);
   document.getElementById('btn-run-simulation').addEventListener('click', runSimulation);
-  document.getElementById('btn-sim-institutional').addEventListener('click', applyInstitutionalPattern);
+  document.getElementById('btn-sim-institutional').addEventListener('click', loadLessonsFromMatrix);
   document.getElementById('btn-back-to-lessons').addEventListener('click', () => {
     document.getElementById('simulation-step-1').style.display = 'block';
     document.getElementById('simulation-step-2').style.display = 'none';
@@ -237,15 +309,29 @@ function setupEventListeners() {
   });
   document.getElementById('sim-course-id').addEventListener('change', (e) => {
     updateClassCheckboxes(e.target.value, 'sim-classes-container');
+    syncClassesCheckboxesWithCourseSemester();
+    loadLessonsFromMatrix();
   });
   document.getElementById('sim-academic-period').addEventListener('change', (e) => {
     const courseId = document.getElementById('sim-course-id').value;
     updateClassCheckboxes(courseId, 'sim-classes-container');
+    syncClassesCheckboxesWithCourseSemester();
+    loadLessonsFromMatrix();
+  });
+  document.getElementById('sim-matrix-semester').addEventListener('change', () => {
+    syncClassesCheckboxesWithCourseSemester();
+    loadLessonsFromMatrix();
+  });
+  document.getElementById('sim-classes-container').addEventListener('change', (e) => {
+    if (e.target.name === 'selected-classes') {
+      loadLessonsFromMatrix();
+    }
   });
   document.getElementById('filter-course').addEventListener('change', renderCalendar); 
   
   // Import Dialog Listeners
   document.getElementById('btn-import-classes').addEventListener('click', () => openImportModal('classes'));
+  document.getElementById('btn-import-matrix').addEventListener('click', () => openImportModal('matrix'));
   document.getElementById('import-file-input').addEventListener('change', handleFileSelect);
   document.getElementById('btn-confirm-import').addEventListener('click', handleConfirmImport);
 }
@@ -843,7 +929,7 @@ async function handleManualEntrySubmit(e) {
 
   // Validar conflitos para CADA turma selecionada (exceto se for o swap que acabamos de resolver)
   for (const cid of classIds) {
-    const conflicts = await fb.checkConflict(data.weekday, data.periods, data.roomId, cid, id);
+    const conflicts = await fb.checkConflict(data.weekday, data.periods, data.roomId, cid, id, data.classType);
     if (conflicts.length > 0) {
       alert(`Conflito para a turma ${classes.find(t => t.id === cid)?.name}:\n` + conflicts.join('\n'));
       return;
@@ -900,14 +986,14 @@ function openSimulationModal() {
   document.getElementById('simulation-step-1').style.display = 'block';
   document.getElementById('simulation-step-2').style.display = 'none';
   
+  // Resetar o dropdown de semestre da matriz
+  document.getElementById('sim-matrix-semester').value = '';
+  
   simulationLessons = [];
   renderSimulationLessons();
   
   // Mostrar gargalos iniciais
   renderBottlenecks();
-
-  // Add 1 initial lesson
-  addLessonToSimulation();
 }
 
 function renderBottlenecks() {
@@ -932,15 +1018,155 @@ function renderBottlenecks() {
   `;
 }
 
-function applyInstitutionalPattern() {
-  simulationLessons = [
-    { id: 1, lessonNumber: 1, classType: 'presencial', periods: [1, 2], roomSelectionMode: 'auto', selectedRoomId: '', requiredRoomType: '', requiredResources: [] },
-    { id: 2, lessonNumber: 2, classType: 'presencial', periods: [1, 2], roomSelectionMode: 'auto', selectedRoomId: '', requiredRoomType: '', requiredResources: [] },
-    { id: 3, lessonNumber: 3, classType: 'presencial', periods: [1, 2], roomSelectionMode: 'auto', selectedRoomId: '', requiredRoomType: '', requiredResources: [] },
-    { id: 4, lessonNumber: 4, classType: 'ead',       periods: [1, 2], roomSelectionMode: 'auto', selectedRoomId: '', requiredRoomType: '', requiredResources: [] },
-    { id: 5, lessonNumber: 5, classType: 'carga_reservada', periods: [1, 2], roomSelectionMode: 'auto', selectedRoomId: '', requiredRoomType: '', requiredResources: [] }
-  ];
-  renderSimulationLessons();
+function syncClassesCheckboxesWithCourseSemester() {
+  const matrixSemesterValue = document.getElementById('sim-matrix-semester').value;
+  if (!matrixSemesterValue) return;
+
+  const academicPeriod = document.getElementById('sim-academic-period').value;
+
+  let semestersToSelect = [];
+  if (matrixSemesterValue === 'all') {
+    semestersToSelect = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  } else if (matrixSemesterValue.endsWith('year')) {
+    const year = parseInt(matrixSemesterValue);
+    semestersToSelect = [year * 2 - 1, year * 2];
+  } else {
+    semestersToSelect = [parseInt(matrixSemesterValue)];
+  }
+
+  const checkboxes = document.querySelectorAll('#sim-classes-container input[name="selected-classes"]');
+  checkboxes.forEach(cb => {
+    const classId = cb.value;
+    const c = classes.find(classItem => classItem.id === classId);
+    if (c) {
+      // Determinar o semestre ativo da turma para o período letivo selecionado (ex: "1 e 2º" no .2 é 2)
+      const matches = [...c.name.matchAll(/\d+/g)].map(m => parseInt(m[0]));
+      let activeSem = c.semester;
+      if (matches.length > 1 && academicPeriod) {
+        if (academicPeriod.endsWith('.2')) {
+          const even = matches.find(num => num % 2 === 0);
+          if (even !== undefined) activeSem = even;
+        } else {
+          const odd = matches.find(num => num % 2 !== 0);
+          if (odd !== undefined) activeSem = odd;
+        }
+      }
+
+      if (semestersToSelect.includes(activeSem)) {
+        cb.checked = true;
+      } else {
+        cb.checked = false;
+      }
+    }
+  });
+}
+
+function loadLessonsFromMatrix() {
+  const courseId = document.getElementById('sim-course-id').value;
+  const academicPeriod = document.getElementById('sim-academic-period').value;
+  const matrixSemesterValue = document.getElementById('sim-matrix-semester').value;
+  
+  if (!courseId) {
+    simulationLessons = [];
+    renderSimulationLessons();
+    return;
+  }
+  
+  if (!academicPeriod) {
+    simulationLessons = [];
+    renderSimulationLessons();
+    return;
+  }
+  
+  if (!matrixSemesterValue) {
+    simulationLessons = [];
+    renderSimulationLessons();
+    return;
+  }
+  
+  // Encontrar as turmas selecionadas
+  const checkedClassIds = Array.from(document.querySelectorAll('#sim-classes-container input[name="selected-classes"]:checked')).map(cb => cb.value);
+  if (checkedClassIds.length === 0) {
+    simulationLessons = [];
+    renderSimulationLessons();
+    return;
+  }
+  
+  // Obter os semestres ativos das turmas selecionadas (ex: 1, 2, 3...)
+  const selectedSemesters = [...new Set(
+    checkedClassIds.flatMap(id => {
+      const c = classes.find(classItem => classItem.id === id);
+      if (!c) return [];
+      
+      // Se o nome da turma contiver múltiplos períodos (ex: "1 e 2º", "2 e 3º")
+      const matches = [...c.name.matchAll(/\d+/g)].map(m => parseInt(m[0]));
+      if (matches.length > 1) {
+        if (academicPeriod.endsWith('.2')) {
+          const even = matches.find(num => num % 2 === 0);
+          return even !== undefined ? [even] : [matches[0]];
+        } else {
+          const odd = matches.find(num => num % 2 !== 0);
+          return odd !== undefined ? [odd] : [matches[0]];
+        }
+      }
+      
+      return [c.semester];
+    }).filter(Boolean)
+  )];
+  
+  // Filtrar disciplinas correspondentes à matriz para o curso, período letivo e período da turma
+  const matchedDisciplines = disciplines.filter(d => 
+    d.courseId === courseId &&
+    d.academicPeriod === academicPeriod &&
+    selectedSemesters.includes(d.semester)
+  );
+
+  const courseDisciplines = disciplines.filter(d => d.courseId === courseId);
+  console.log("loadLessonsFromMatrix debug:", {
+    courseId,
+    academicPeriod,
+    checkedClassIds,
+    selectedSemesters,
+    totalDisciplines: disciplines.length,
+    matchedDisciplinesCount: matchedDisciplines.length,
+    courseDisciplinesCount: courseDisciplines.length,
+    courseDisciplinesInDB: courseDisciplines.map(d => ({ name: d.name, period: d.academicPeriod, semester: d.semester }))
+  });
+  
+  if (matchedDisciplines.length > 0) {
+    simulationLessons = matchedDisciplines.map((d, index) => {
+      let classType = d.classType || 'presencial';
+      if (d.chPres > 0) {
+        classType = 'presencial';
+      } else if (d.chEad > 0) {
+        classType = 'ead';
+      } else if (d.chTotal > 0) {
+        classType = 'carga_reservada';
+      }
+
+      return {
+        id: d.id || (Date.now() + Math.random()),
+        lessonNumber: index + 1,
+        disciplineId: d.id || null,
+        disciplineName: d.name,
+        classType: classType,
+        periods: [1, 2],
+        roomSelectionMode: 'auto',
+        selectedRoomId: '',
+        requiredRoomType: '',
+        requiredResources: [],
+        chPres: d.chPres || 0,
+        chEad: d.chEad || 0,
+        chExt: d.chExt || 0,
+        chTotal: d.chTotal || 0,
+        semester: d.semester
+      };
+    });
+    renderSimulationLessons();
+  } else {
+    simulationLessons = [];
+    renderSimulationLessons();
+  }
 }
 
 function addLessonToSimulation() {
@@ -959,29 +1185,49 @@ function addLessonToSimulation() {
 
 function renderSimulationLessons() {
   const list = document.getElementById('sim-lessons-list');
-  const roomOptions = [...rooms]
-    .sort((a, b) => a.name.toUpperCase().localeCompare(b.name.toUpperCase(), undefined, { numeric: true }))
-    .map(r => `<option value="${r.id}">${r.name}</option>`)
-    .join('');
-
-  list.innerHTML = simulationLessons.map((lesson, idx) => `
-    <div class="lesson-item">
-      <h5>Aula #${lesson.lessonNumber}</h5>
-
-      <div class="filter-group" style="grid-column: span 2;">
-        <label>Tipo</label>
-        <select onchange="updateLesson(${idx}, 'classType', this.value)" class="form-select">
-          <option value="presencial" ${lesson.classType === 'presencial' ? 'selected' : ''}>Presencial</option>
-          <option value="ead" ${lesson.classType === 'ead' ? 'selected' : ''}>EAD</option>
-          <option value="carga_reservada" ${lesson.classType === 'carga_reservada' ? 'selected' : ''}>Carga Reservada</option>
-        </select>
+  
+  if (simulationLessons.length === 0) {
+    list.innerHTML = `
+      <div style="text-align:center; padding:2rem; border:1px dashed var(--border-color); border-radius:12px; grid-column: span 2;">
+        <p style="color:#64748B; font-size:0.8rem; margin:0;">
+          Nenhuma aula carregada.<br>
+          Selecione o <strong>Semestre/Período do Curso</strong> e clique em <strong>Carregar da Matriz</strong> ou use o botão <strong>+ Aula</strong> para adicionar manualmente.
+        </p>
       </div>
+    `;
+    return;
+  }
 
-      <button class="btn-icon action-execute" onclick="removeLesson(${idx})" style="position:absolute; top:1rem; right:1rem; color:#ef4444; background:rgba(239, 68, 68, 0.1); border-radius:10px; width:35px; height:35px;" title="Remover Aula">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-      </button>
-    </div>
-  `).join('');
+  list.innerHTML = simulationLessons.map((lesson, idx) => {
+    const chInfo = lesson.chTotal 
+      ? `<div style="font-size:0.75rem; color:#64748B; margin-top:0.4rem; margin-bottom: 0.6rem; line-height: 1.4;">
+           <strong>Carga Horária:</strong> Presencial: ${lesson.chPres}h | EAD: ${lesson.chEad}h | Extensão: ${lesson.chExt}h | Total: ${lesson.chTotal}h
+           ${lesson.semester ? ` | Semestre/Período: ${lesson.semester}º` : ''}
+         </div>`
+      : '';
+
+    return `
+      <div class="lesson-item" style="position:relative;">
+        <h5 style="padding-right:2rem; word-break:break-word;">
+          Aula #${lesson.lessonNumber}${lesson.disciplineName ? `: ${esc(lesson.disciplineName)}` : ''}
+        </h5>
+        ${chInfo}
+
+        <div class="filter-group" style="grid-column: span 2;">
+          <label>Tipo</label>
+          <select onchange="updateLesson(${idx}, 'classType', this.value)" class="form-select">
+            <option value="presencial" ${lesson.classType === 'presencial' ? 'selected' : ''}>Presencial</option>
+            <option value="ead" ${lesson.classType === 'ead' ? 'selected' : ''}>EAD</option>
+            <option value="carga_reservada" ${lesson.classType === 'carga_reservada' ? 'selected' : ''}>Carga Reservada</option>
+          </select>
+        </div>
+
+        <button class="btn-icon action-execute" onclick="removeLesson(${idx})" style="position:absolute; top:1rem; right:1rem; color:#ef4444; background:rgba(239, 68, 68, 0.1); border-radius:10px; width:35px; height:35px;" title="Remover Aula">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
+    `;
+  }).join('');
 }
 
 window.updateLesson = (idx, field, value) => {
@@ -1129,7 +1375,7 @@ window.exportSimulation = async (simId) => {
       }
     }
     for (const cid of classIds) {
-      const conflicts = await fb.checkConflict(alloc.weekday, alloc.periods, alloc.suggestedRoomId, cid);
+      const conflicts = await fb.checkConflict(alloc.weekday, alloc.periods, alloc.suggestedRoomId, cid, null, alloc.classType);
       if (conflicts.length > 0) {
         alert(`Conflito detectado para a Aula #${alloc.lessonNumber} na turma ${classes.find(t => t.id === cid)?.name}:\n${conflicts.join('\n')}\nA exportação foi cancelada.`);
         return;
@@ -1254,8 +1500,87 @@ function openImportModal(type) {
   previewContainer.style.display = 'none';
   confirmBtn.disabled = true;
   
-  title.textContent = 'Importar Turmas e Alunos (.xlsx)';
+  const periodGroup = document.getElementById('import-classes-period-title').closest('.filter-group');
+  const capacityGroup = document.getElementById('import-classes-default-capacity').closest('.filter-group');
+  
+  if (type === 'matrix') {
+    title.textContent = 'Importar Matriz Curricular (.xlsx)';
+    if (periodGroup) periodGroup.style.display = 'none';
+    if (capacityGroup) capacityGroup.style.display = 'none';
+  } else {
+    title.textContent = 'Importar Turmas e Alunos (.xlsx)';
+    if (periodGroup) periodGroup.style.display = 'block';
+    if (capacityGroup) capacityGroup.style.display = 'block';
+  }
+  
   modal.style.display = 'flex';
+}
+
+function formatExcelDateToPeriod(value) {
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = value.getMonth() + 1;
+    return `${year}.${month}`;
+  }
+  
+  const str = String(value || '').trim();
+  if (!str) return '';
+
+  // Formatos com barra: ex "1/1/26", "2/6/26", "01/01/2026", "02/06/2026"
+  const dateMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (dateMatch) {
+    let year = parseInt(dateMatch[3]);
+    if (year < 100) year += 2000;
+    
+    const part1 = parseInt(dateMatch[1]);
+    const part2 = parseInt(dateMatch[2]);
+    
+    // Mapear o mês: no Excel, 2026.1 vira jan (mês 1) e 2026.2 vira fev (mês 2)
+    let month = 1;
+    if (part1 === 1 || part1 === 2) {
+      month = part1;
+    } else if (part2 === 1 || part2 === 2) {
+      month = part2;
+    } else {
+      month = part1; // fallback seguro
+    }
+    return `${year}.${month}`;
+  }
+
+  const dmyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmyMatch) {
+    const month = parseInt(dmyMatch[2]);
+    const year = parseInt(dmyMatch[3]);
+    return `${year}.${month}`;
+  }
+
+  const myMatch = str.match(/^(\d{1,2})\/(\d{4})$/);
+  if (myMatch) {
+    const month = parseInt(myMatch[1]);
+    const year = parseInt(myMatch[2]);
+    return `${year}.${month}`;
+  }
+  
+  const ymdMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1]);
+    const month = parseInt(ymdMatch[2]);
+    return `${year}.${month}`;
+  }
+
+  if (/^\d{4}\.\d+$/.test(str)) {
+    return str;
+  }
+
+  if (/^\d{5}$/.test(str)) {
+    const serial = parseInt(str);
+    const date = new Date((serial - 25569) * 86400 * 1000);
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth() + 1;
+    return `${year}.${month}`;
+  }
+  
+  return str;
 }
 
 function handleFileSelect(e) {
@@ -1266,8 +1591,12 @@ function handleFileSelect(e) {
   reader.onload = function(evt) {
     try {
       const data = new Uint8Array(evt.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      parseClassesWorkbook(workbook);
+      const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+      if (importType === 'matrix') {
+        parseMatrixWorkbook(workbook);
+      } else {
+        parseClassesWorkbook(workbook);
+      }
     } catch (err) {
       console.error(err);
       alert('Erro ao ler a planilha: ' + err.message);
@@ -1283,7 +1612,7 @@ function parseClassesWorkbook(workbook) {
   ) || workbook.SheetNames[0];
   
   const worksheet = workbook.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+  const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false });
   if (rows.length < 2) {
     alert('A planilha de turmas está vazia.');
     return;
@@ -1344,6 +1673,133 @@ function parseClassesWorkbook(workbook) {
   renderImportPreview();
 }
 
+function parseMatrixWorkbook(workbook) {
+  const result = [];
+  
+  workbook.SheetNames.forEach(sheetName => {
+    // Ignorar abas de instrução ou controle interno
+    const lowerSheetName = sheetName.toLowerCase();
+    if (lowerSheetName.startsWith('instru') || lowerSheetName.includes('hist') || lowerSheetName.includes('readme') || lowerSheetName.startsWith('capa')) {
+      return;
+    }
+    
+    const worksheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false });
+    if (rows.length < 2) return;
+    
+    // Identificar a linha de cabeçalho
+    let headerIdx = -1;
+    let headers = [];
+    for (let i = 0; i < Math.min(10, rows.length); i++) {
+      const r = rows[i] || [];
+      const rStr = r.map(c => String(c || '').toLowerCase().trim());
+      if (rStr.includes('disciplina') && (rStr.includes('semestre') || rStr.includes('período') || rStr.includes('periodo'))) {
+        headerIdx = i;
+        headers = rStr;
+        break;
+      }
+    }
+    
+    if (headerIdx === -1) {
+      console.warn(`Cabeçalho não encontrado na aba: ${sheetName}`);
+      return;
+    }
+    
+    // Mapeamento de colunas padrão com base nos headers encontrados
+    let colMapping = {
+      curso: -1,
+      semestre: -1,
+      periodo: -1,
+      disciplina: -1,
+      chPres: -1,
+      chEad: -1,
+      chExt: -1,
+      chTotal: -1
+    };
+    
+    headers.forEach((h, idx) => {
+      if (h === 'curso') colMapping.curso = idx;
+      else if (h === 'semestre') colMapping.semestre = idx;
+      else if (h === 'período' || h === 'periodo') colMapping.periodo = idx;
+      else if (h === 'disciplina') colMapping.disciplina = idx;
+      else if (h.includes('ch.pres') || h.includes('presencial')) colMapping.chPres = idx;
+      else if (h.includes('ch.ead') || h.includes('ead')) colMapping.chEad = idx;
+      else if (h.includes('ch.ext') || h.includes('ext')) colMapping.chExt = idx;
+      else if (h.includes('ch.tota') || h.includes('total')) colMapping.chTotal = idx;
+    });
+    
+    // Fallbacks caso os nomes exatos não batam
+    if (colMapping.curso === -1) colMapping.curso = headers.findIndex(h => h.includes('curso'));
+    if (colMapping.semestre === -1) colMapping.semestre = headers.findIndex(h => h.includes('semestre') || h.includes('sem.'));
+    if (colMapping.periodo === -1) colMapping.periodo = headers.findIndex(h => h.includes('período') || h.includes('periodo') || h.includes('per.'));
+    if (colMapping.disciplina === -1) colMapping.disciplina = headers.findIndex(h => h.includes('disciplina') || h.includes('matéria') || h.includes('materia'));
+    if (colMapping.chPres === -1) colMapping.chPres = headers.findIndex(h => h.includes('ch.pres') || h.includes('presencial'));
+    if (colMapping.chEad === -1) colMapping.chEad = headers.findIndex(h => h.includes('ch.ead') || h.includes('ead'));
+    if (colMapping.chExt === -1) colMapping.chExt = headers.findIndex(h => h.includes('ext'));
+    if (colMapping.chTotal === -1) colMapping.chTotal = headers.findIndex(h => h.includes('total') || h.includes('tota'));
+
+    // Se colunas fundamentais não forem encontradas, ignorar aba
+    if (colMapping.disciplina === -1 || colMapping.periodo === -1 || colMapping.semestre === -1) {
+      console.warn(`Aba ${sheetName} ignorada por falta de colunas essenciais.`);
+      return;
+    }
+    
+    const startIndex = headerIdx + 1;
+    for (let i = startIndex; i < rows.length; i++) {
+      const row = rows[i] || [];
+      if (row.length === 0) continue;
+      
+      const disciplineName = String(row[colMapping.disciplina] || '').trim();
+      if (!disciplineName || disciplineName.toLowerCase() === 'disciplina' || disciplineName.toLowerCase() === 'total') continue;
+      
+      let courseName = colMapping.curso !== -1 ? String(row[colMapping.curso] || '').trim() : '';
+      if (!courseName) courseName = sheetName; // fallback para o nome da aba
+      
+      let normalized = courseName.toUpperCase().trim();
+      if (normalized === 'ARQUITETURA' || normalized === 'A URB.' || normalized === 'A URB' || normalized === 'ARQUITETURA URB.') normalized = 'ARQUITETURA URB.';
+      if (normalized === 'ENGENHARIA CIV.' || normalized === 'ENG. CIVIL' || normalized === 'ENGENHARIA CIVIL') normalized = 'ENGENHARIA CÍVIL';
+      if (normalized === 'GEST.COMERCIAL' || normalized === 'GESTÃO COMERCIAL') normalized = 'GESTÃO COMERCIAL';
+      if (normalized === 'GEST.FINANCEIRA' || normalized === 'GESTÃO FINANCEIRA') normalized = 'GESTÃO FINANCEIRA';
+      if (normalized === 'MED.VETERINÁRIA' || normalized === 'VETERINÁRIA' || normalized === 'MEDICINA VETERINÁRIA') normalized = 'MEDICINA VETERINÁRIA';
+      if (normalized === 'CIÊNCIAS CONTÁBEIS' || normalized === 'CONTÁBEIS' || normalized === 'CONTABEIS') normalized = 'CONTÁBEIS';
+      if (normalized === 'GESTÃO DE RECURSOS HUMANOS' || normalized === 'RECURSOS HUMANOS' || normalized === 'RH') normalized = 'RECURSOS HUMANOS';
+      courseName = normalized;
+      
+      const academicPeriod = formatExcelDateToPeriod(row[colMapping.semestre]); // ex: 2026.1 ou 2026.2
+      const classPeriodStr = String(row[colMapping.periodo] || '').trim(); // ex: 1, 2, 3...
+      
+      if (!academicPeriod || !classPeriodStr) continue;
+      
+      const semMatch = classPeriodStr.match(/\d+/);
+      const semester = semMatch ? parseInt(semMatch[0]) : 1;
+      
+      const chPres = colMapping.chPres !== -1 ? (parseInt(row[colMapping.chPres]) || 0) : 0;
+      const chEad = colMapping.chEad !== -1 ? (parseInt(row[colMapping.chEad]) || 0) : 0;
+      const chExt = colMapping.chExt !== -1 ? (parseInt(row[colMapping.chExt]) || 0) : 0;
+      const chTotal = colMapping.chTotal !== -1 ? (parseInt(row[colMapping.chTotal]) || 0) : (chPres + chEad + chExt);
+      
+      result.push({
+        courseName,
+        academicPeriod,
+        semester,
+        disciplineName,
+        chPres,
+        chEad,
+        chExt,
+        chTotal
+      });
+    }
+  });
+  
+  if (result.length === 0) {
+    alert('Nenhuma disciplina identificada nas abas da planilha.');
+    return;
+  }
+  
+  parsedImportData = result;
+  renderImportPreview();
+}
+
 function renderImportPreview() {
   const container = document.getElementById('import-preview-container');
   const thead = document.getElementById('import-preview-thead');
@@ -1354,33 +1810,167 @@ function renderImportPreview() {
   container.style.display = 'block';
   confirmBtn.disabled = false;
   
-  thead.innerHTML = `
-    <tr>
-      <th style="text-align:left">Curso</th>
-      <th style="text-align:left">Período / Nome</th>
-      <th style="text-align:center">Alunos</th>
-    </tr>
-  `;
-  
-  let previewRowsHtml = '';
-  const previewLimit = Math.min(15, parsedImportData.length);
-  
-  for (let i = 0; i < previewLimit; i++) {
-    const c = parsedImportData[i];
-    previewRowsHtml += `
+  if (importType === 'matrix') {
+    thead.innerHTML = `
       <tr>
-        <td>${esc(c.courseName)}</td>
-        <td>${esc(c.periodStr)}</td>
-        <td style="text-align:center">${c.studentCount}</td>
+        <th style="text-align:left">Curso</th>
+        <th style="text-align:left">Sem. Letivo</th>
+        <th style="text-align:center">Período</th>
+        <th style="text-align:left">Disciplina</th>
+        <th style="text-align:center">CH Pres</th>
+        <th style="text-align:center">CH EAD</th>
+        <th style="text-align:center">CH Total</th>
       </tr>
     `;
+    
+    let previewRowsHtml = '';
+    const previewLimit = Math.min(15, parsedImportData.length);
+    for (let i = 0; i < previewLimit; i++) {
+      const d = parsedImportData[i];
+      previewRowsHtml += `
+        <tr>
+          <td>${esc(d.courseName)}</td>
+          <td>${esc(d.academicPeriod)}</td>
+          <td style="text-align:center">${d.semester}º</td>
+          <td>${esc(d.disciplineName)}</td>
+          <td style="text-align:center">${d.chPres}h</td>
+          <td style="text-align:center">${d.chEad}h</td>
+          <td style="text-align:center">${d.chTotal}h</td>
+        </tr>
+      `;
+    }
+    tbody.innerHTML = previewRowsHtml;
+    const detectedCourses = [...new Set(parsedImportData.map(d => d.courseName))].sort();
+    summary.innerHTML = `Total de <strong>${parsedImportData.length} disciplinas</strong> detectadas em todas as matrizes.<br>` +
+                        `<span style="display:block; margin-top:0.4rem; font-size:0.8rem; color:#a5b4fc;">` +
+                        `Cursos identificados: ${detectedCourses.join(', ')}</span>`;
+  } else {
+    thead.innerHTML = `
+      <tr>
+        <th style="text-align:left">Curso</th>
+        <th style="text-align:left">Período / Nome</th>
+        <th style="text-align:center">Alunos</th>
+      </tr>
+    `;
+    
+    let previewRowsHtml = '';
+    const previewLimit = Math.min(15, parsedImportData.length);
+    for (let i = 0; i < previewLimit; i++) {
+      const c = parsedImportData[i];
+      previewRowsHtml += `
+        <tr>
+          <td>${esc(c.courseName)}</td>
+          <td>${esc(c.periodStr)}</td>
+          <td style="text-align:center">${c.studentCount}</td>
+        </tr>
+      `;
+    }
+    tbody.innerHTML = previewRowsHtml;
+    summary.innerHTML = `Total de <strong>${parsedImportData.length} turmas</strong> detectadas.`;
   }
-  
-  tbody.innerHTML = previewRowsHtml;
-  summary.innerHTML = `Total de <strong>${parsedImportData.length} turmas</strong> detectadas.`;
 }
 
 async function handleConfirmImport() {
+  if (importType === 'matrix') {
+    const btn = document.getElementById('btn-confirm-import');
+    const origText = btn.textContent;
+    btn.innerHTML = '<span class="spinner"></span> Importando...';
+    btn.disabled = true;
+    
+    try {
+      const uniqueCourseNames = [...new Set(parsedImportData.map(c => c.courseName))];
+      const courseMap = {};
+      const coursesToCreate = [];
+      
+      uniqueCourseNames.forEach(name => {
+        let normalized = name.toUpperCase().trim();
+        if (normalized === 'ARQUITETURA' || normalized === 'A URB.' || normalized === 'A URB' || normalized === 'ARQUITETURA URB.') normalized = 'ARQUITETURA URB.';
+        if (normalized === 'ENGENHARIA CIV.' || normalized === 'ENG. CIVIL' || normalized === 'ENGENHARIA CIVIL') normalized = 'ENGENHARIA CÍVIL';
+        if (normalized === 'GEST.COMERCIAL' || normalized === 'GESTÃO COMERCIAL') normalized = 'GESTÃO COMERCIAL';
+        if (normalized === 'GEST.FINANCEIRA' || normalized === 'GESTÃO FINANCEIRA') normalized = 'GESTÃO FINANCEIRA';
+        if (normalized === 'MED.VETERINÁRIA' || normalized === 'VETERINÁRIA' || normalized === 'MEDICINA VETERINÁRIA') normalized = 'MEDICINA VETERINÁRIA';
+        if (normalized === 'CIÊNCIAS CONTÁBEIS' || normalized === 'CONTÁBEIS' || normalized === 'CONTABEIS') normalized = 'CONTÁBEIS';
+        if (normalized === 'GESTÃO DE RECURSOS HUMANOS' || normalized === 'RECURSOS HUMANOS' || normalized === 'RH') normalized = 'RECURSOS HUMANOS';
+
+        const existing = courses.find(c => c.name.trim().toUpperCase() === normalized);
+        if (existing) {
+          courseMap[name] = existing;
+        } else {
+          const sigla = normalized.substring(0, 4).toUpperCase().replace(/[^A-Z]/g, '');
+          coursesToCreate.push({ name: normalized, code: sigla || 'CURS' });
+        }
+      });
+      
+      if (coursesToCreate.length > 0) {
+        const created = await fb.createCoursesBatch(coursesToCreate);
+        created.forEach(c => {
+          courseMap[c.name] = c;
+          const origExcelName = uniqueCourseNames.find(x => {
+            let norm = x.toUpperCase().trim();
+            if (norm === 'ARQUITETURA' || norm === 'A URB.' || norm === 'A URB' || norm === 'ARQUITETURA URB.') norm = 'ARQUITETURA URB.';
+            if (norm === 'ENGENHARIA CIV.' || norm === 'ENG. CIVIL' || norm === 'ENGENHARIA CIVIL') norm = 'ENGENHARIA CÍVIL';
+            if (norm === 'GEST.COMERCIAL' || norm === 'GESTÃO COMERCIAL') norm = 'GESTÃO COMERCIAL';
+            if (norm === 'GEST.FINANCEIRA' || norm === 'GESTÃO FINANCEIRA') norm = 'GESTÃO FINANCEIRA';
+            if (norm === 'MED.VETERINÁRIA' || norm === 'VETERINÁRIA' || norm === 'MEDICINA VETERINÁRIA') norm = 'MEDICINA VETERINÁRIA';
+            if (norm === 'CIÊNCIAS CONTÁBEIS' || norm === 'CONTÁBEIS' || norm === 'CONTABEIS') norm = 'CONTÁBEIS';
+            if (norm === 'GESTÃO DE RECURSOS HUMANOS' || norm === 'RECURSOS HUMANOS' || norm === 'RH') norm = 'RECURSOS HUMANOS';
+            return norm === c.name;
+          });
+          if (origExcelName) {
+            courseMap[origExcelName] = c;
+          }
+        });
+      }
+      
+      const courseIds = [...new Set(Object.values(courseMap).map(c => c.id))];
+      const academicPeriods = [...new Set(parsedImportData.map(d => d.academicPeriod))];
+      
+      // Limpar as disciplinas antigas para estes cursos e períodos letivos
+      for (const courseId of courseIds) {
+        for (const p of academicPeriods) {
+          await fb.clearDisciplines(courseId, p);
+        }
+      }
+      
+      // Criar as novas disciplinas
+      const disciplinesToCreate = parsedImportData.map(item => {
+        const course = courseMap[item.courseName];
+        let classType = 'ead';
+        if (item.chPres > 0) {
+          classType = 'presencial';
+        } else if (item.chPres === 0 && item.chEad === 0 && item.chTotal > 0) {
+          classType = 'carga_reservada';
+        }
+        
+        return {
+          courseId: course.id,
+          academicPeriod: item.academicPeriod,
+          semester: item.semester,
+          name: item.disciplineName,
+          chPres: item.chPres,
+          chEad: item.chEad,
+          chExt: item.chExt,
+          chTotal: item.chTotal,
+          classType: classType,
+          active: true
+        };
+      });
+      
+      await fb.createDisciplinesBatch(disciplinesToCreate);
+      alert('Matrizes curriculares importadas com sucesso!');
+      
+      document.getElementById('modal-import-data').style.display = 'none';
+      await loadAllData();
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao importar as matrizes: ' + err.message);
+    } finally {
+      btn.textContent = origText;
+      btn.disabled = false;
+    }
+    return;
+  }
+
   const periodTitleInput = document.getElementById('import-classes-period-title');
   const academicPeriod = periodTitleInput.value.trim();
   if (!academicPeriod) {

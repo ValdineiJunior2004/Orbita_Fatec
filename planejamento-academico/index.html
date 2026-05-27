@@ -95,10 +95,16 @@
       <section id="tab-cursos" class="tab-content">
         <div class="section-header">
           <h2>Cursos Cadastrados</h2>
-          <button class="btn-primary action-execute" id="btn-add-course">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Novo Curso
-          </button>
+          <div style="display:flex; gap:1rem;">
+            <button class="btn-primary action-execute" id="btn-import-matrix" style="background:white; color:var(--primary-blue); border:1px solid var(--border-color); box-shadow:none;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Importar Matriz (.xlsx)
+            </button>
+            <button class="btn-primary action-execute" id="btn-add-course">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Novo Curso
+            </button>
+          </div>
         </div>
         <div class="data-grid" id="courses-grid"></div>
       </section>
@@ -413,9 +419,33 @@
                     <option value="">Carregando...</option>
                   </select>
                 </div>
-                <div class="filter-group">
-                  <label>Turmas Envolvidas</label>
-                  <div id="sim-classes-container" class="checkbox-list-container" style="max-height:140px;"></div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                  <div class="filter-group">
+                    <label>Semestre/Período do Curso</label>
+                    <select id="sim-matrix-semester" class="form-select">
+                      <option value="">Selecione...</option>
+                      <option value="1">1º Período</option>
+                      <option value="2">2º Período</option>
+                      <option value="3">3º Período</option>
+                      <option value="4">4º Período</option>
+                      <option value="5">5º Período</option>
+                      <option value="6">6º Período</option>
+                      <option value="7">7º Período</option>
+                      <option value="8">8º Período</option>
+                      <option value="9">9º Período</option>
+                      <option value="10">10º Período</option>
+                      <option value="1year">1º Ano (1º e 2º Períodos)</option>
+                      <option value="2year">2º Ano (3º e 4º Períodos)</option>
+                      <option value="3year">3º Ano (5º e 6º Períodos)</option>
+                      <option value="4year">4º Ano (7º e 8º Períodos)</option>
+                      <option value="5year">5º Ano (9º e 10º Períodos)</option>
+                      <option value="all">Todos os Períodos</option>
+                    </select>
+                  </div>
+                  <div class="filter-group">
+                    <label>Turmas Envolvidas</label>
+                    <div id="sim-classes-container" class="checkbox-list-container" style="max-height:140px;"></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -426,7 +456,7 @@
                 <h5 style="font-size:0.8rem; color:var(--text-main); font-weight:800; text-transform:uppercase; letter-spacing:1px;">2. Estrutura das Aulas</h5>
                 <div style="display:flex; gap:0.5rem;">
                    <button class="btn-primary" id="btn-sim-institutional" style="padding:0.5rem 1rem; font-size:0.75rem; background:white; color:var(--primary-blue); border:1px solid var(--border-color); box-shadow:none;">
-                    Padrão (3+2)
+                    Carregar da Matriz
                   </button>
                   <button class="btn-primary" id="btn-sim-add-lesson" style="padding:0.5rem 1rem; font-size:0.75rem;">
                     + Aula

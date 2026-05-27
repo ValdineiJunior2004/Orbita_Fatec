@@ -218,11 +218,12 @@ function initDashboard() {
 
   // Polling via API REST para simular realtime
   setInterval(async () => {
+    if (document.hidden) return; // Ignorar se a aba estiver oculta/inativa
     try {
       notebooksDB = await apiFetch('/emprestimos');
       applyFilters();
     } catch(err) {}
-  }, 5000);
+  }, 120000);
 
   // Filters
   document.getElementById('search-input').addEventListener('input',  applyFilters);
@@ -495,12 +496,13 @@ function initMovimentar() {
 
   // Polling listener via API para o equipamento atual (Reduzido para economizar recursos do servidor)
   setInterval(async () => {
+    if (document.hidden) return; // Ignorar se a aba estiver oculta/inativa
     try {
       const data = await apiFetch(`/emprestimos/${notebookId}`);
       noteObj = data; 
       updateHeader(noteObj);
     } catch(err) {}
-  }, 30000);
+  }, 120000);
 
   // Dynamic fields
   const radios   = document.querySelectorAll('input[name="status"]');

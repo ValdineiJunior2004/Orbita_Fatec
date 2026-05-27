@@ -9,7 +9,7 @@ O Órbita FATEC é um ecossistema de gestão institucional desenvolvido para a F
   - `firestore.rules`: Regras de segurança rigorosas trancando todo o acesso client-side.
 - `/api`: Servidor Backend em Node.js (Express) hospedado no Vercel. Contém a lógica de autenticação via Firebase Admin SDK (`firebase.js`) e as rotas para os módulos (`/rotas`).
 - `/core`: Arquivos compartilhados da arquitetura do Front-end (Firebase Auth, layout, segurança).
-- `/emprestimo`, `/usuarios`, `/ensalamento`, `/rh/carga-horaria`, `/rh/funcionarios`, `/empresas`, `/valida`, `/meu-espaco`, `/fidelidade`: Módulos independentes do sistema consumindo a API REST através da função `apiFetch` (ou endpoint público).
+- `/emprestimo`, `/usuarios`, `/planejamento-academico`, `/rh/carga-horaria`, `/rh/funcionarios`, `/empresas`, `/valida`, `/meu-espaco`, `/fidelidade`: Módulos independentes do sistema consumindo a API REST através da função `apiFetch` (ou endpoint público).
 - `/regras`: Documentação técnica e logs de alteração.
 
 ## 3. Fluxo de autenticação e Arquitetura REST
@@ -23,8 +23,8 @@ O sistema utiliza uma arquitetura híbrida segura:
 O sistema utiliza Role-Based Access Control (RBAC). Os cargos base definidos em `permissions.js` são:
 
 - **ADM N1 (Super Admin)**: Acesso total a todos os módulos e configurações do sistema.
-- **ADM N2 (Setor/Chefia)**: Acesso gerencial a Empréstimos, Usuários, Ensalamento e Carga Horária (com restrições dependendo da configuração global).
-- **TI (Suporte)**: Foco em Empréstimos, Usuários (gestão técnica) e Ensalamento.
+- **ADM N2 (Setor/Chefia)**: Acesso gerencial a Empréstimos, Usuários, Planejamento Acadêmico, Carga Horária e Parceiros (com restrições dependendo da configuração global).
+- **TI (Suporte)**: Foco em Empréstimos, Usuários (gestão técnica) e Planejamento Acadêmico.
 - **RH (Recursos Humanos)**: Acesso exclusivo ao Dashboard e Carga Horária.
 - **Visitante**: Acesso apenas para consulta ao Dashboard (módulos básicos liberados).
 
@@ -44,9 +44,13 @@ O sistema utiliza Role-Based Access Control (RBAC). Os cargos base definidos em 
 - **Finalidade**: Gestão de contas e permissões (RBAC).
 - **Backend API**: `/api/rotas/usuarios.js` (Usa Auth do Firebase Admin para criar usuários e gerencia coleção `users` e `config`).
 
-### Ensalamento
-- **Finalidade**: Gestão inteligente de salas com motor de simulação de conflitos de horários rodando 100% no servidor.
-- **Backend API**: `/api/rotas/ensalamento.js`.
+### Planejamento Acadêmico (antigo Ensalamento)
+- **Finalidade**: Gestão inteligente de cursos, turmas com controle de lotes/períodos letivos (ex: 2026.2), salas de aula com tipo de equipamentos, calendário semanal de ensalamento e simulador de encaixe de aulas com I.A. A pasta foi renomeada de `/ensalamento` para `/planejamento-academico`.
+- **Backend API**: `/api/rotas/ensalamento.js` (o ID interno da rota permanece `ensalamento` para compatibilidade com o sistema de permissões RBAC).
+- **Coleções Firestore**: `courses`, `classes`, `rooms`, `calendarEntries`, `simulations`.
+- **Regras de Salas**: Cada sala agora possui um campo `equipmentType` com os valores `UNI` (Universitária), `CCM` (Carteira e Cadeira Medicina) ou `CC` (Carteira e Cadeira), para controle interno.
+- **Regras de Turmas**: Turmas são importadas e organizadas por **lote/período letivo** (ex: `2026.2`). A cada novo semestre, um novo lote é criado, mantendo o histórico separado.
+- **Simulador**: Simplificado — cada aula configurável tem apenas o campo **Tipo** (Presencial / EAD / Carga Reservada). O período é fixo (Noite Inteira P1+P2) e o modo é sempre Automático (I.A.).
 
 ### Carga Horária
 - **Finalidade**: Registro de entrada/saída em eventos (RH).
@@ -471,3 +475,103 @@ Para garantir que o front-end estático e a API servida em Node.js (funções se
 
 ---
 *Fim da documentação.*
+
+---
+
+## 10. Histórico de alterações — Sessão 2026-05-26 (Branch: ensalamento)
+
+### [2026-05-26] Renomeação e Reestruturação do Módulo de Ensalamento para Planejamento Acadêmico
+- Autor: Antigravity
+- Branch: ensalamento
+- Arquivos alterados/criados:
+  - `/planejamento-academico/` (pasta criada, substitui `/ensalamento/`)
+  - `/planejamento-academico/index.html` (atualizado título, meta, URL do módulo)
+  - `/planejamento-academico/ensalamento.js` (renomeado internamente)
+  - `/planejamento-academico/ensalamento.css`
+  - `/planejamento-academico/firebase-service.js`
+  - `/planejamento-academico/simulation-engine.js`
+  - `/core/permissions.js` (URL do módulo atualizada para `/planejamento-academico/index.html`)
+  - `/regras/regra_do_app.md` (documentação)
+- Tipo: Refatoração de Estrutura e Identidade
+- Motivo: O módulo de Ensalamento evoluiu para um sistema completo de Planejamento Acadêmico que vai além do simples ensalamento de salas, passando a incluir controle de matrizes curriculares, turmas por período letivo e simulação de grade semanal. O ID interno (`ensalamento`) foi mantido na API e no sistema de permissões para não quebrar a autenticação RBAC.
+- Impacto: A pasta `/ensalamento` foi excluída. O módulo agora reside em `/planejamento-academico`. Nenhuma rota de API foi alterada.
+- Como testar: Acessar `/planejamento-academico/index.html` e verificar se o módulo carrega corretamente.
+- Como reverter: Restaurar a pasta `/ensalamento` e reverter o `permissions.js`.
+
+### [2026-05-26] Sistema de Importação de Turmas por Lotes/Períodos Letivos
+- Autor: Antigravity
+- Branch: ensalamento
+- Arquivos alterados:
+  - `/planejamento-academico/index.html` (botão e modal de importação com campo de título do lote)
+  - `/planejamento-academico/ensalamento.js` (lógica de importação XLSX com campo `academicPeriod`, filtros dinâmicos de período, renderização de turmas filtradas)
+  - `/api/rotas/ensalamento.js` (rota `POST /custom/classes/batch` para importação em lote)
+- Tipo: Nova Funcionalidade
+- Motivo: O administrativo precisava de uma forma de separar as turmas por semestre. Agora ao importar um XLSX de turmas, o usuário define o título do período (ex: `2026.2`). No próximo ano, pode criar um novo lote `2027.1` sem apagar o histórico anterior.
+- Impacto: Turmas são exibidas filtradas pelo período letivo selecionado. Os dropdowns de período são populados dinamicamente com base nos valores existentes no banco.
+- Como testar: Importar um arquivo XLSX de turmas informando o período `2026.2`. Verificar se o dropdown de período exibe `2026.2` e se as turmas aparecem filtradas corretamente.
+
+### [2026-05-26] Salas: Campo Bloco Substituído por Tipo de Equipamentos (UNI / CCM / CC)
+- Autor: Antigravity
+- Branch: ensalamento
+- Arquivos alterados:
+  - `/planejamento-academico/index.html` (modal de sala e filtro da aba Salas)
+  - `/planejamento-academico/ensalamento.js` (funções `openRoomModal`, `handleRoomSubmit`, `renderRooms`)
+- Tipo: Evolução de Funcionalidade
+- Motivo: O campo "Bloco" não tinha valor prático para o ensalamento. O controle interno do tipo de equipamento disponível em cada sala (universitária, medicina, genérica) é mais relevante para alocação correta.
+- Impacto: O campo `block` foi substituído pelo campo `equipmentType` no Firestore. Salas sem o campo exibem `UNI` por padrão (fallback seguro). O filtro da aba Salas agora é por tipo de equipamento.
+- Tipos disponíveis:
+  - `UNI` — Universitária (padrão)
+  - `CCM` — Carteira e Cadeira Medicina
+  - `CC` — Carteira e Cadeira
+- Como testar: Criar/editar uma sala e verificar se o dropdown de tipo de equipamentos aparece no lugar do campo Bloco.
+- Como reverter: Restaurar o campo `room-block` no HTML e `block` no JS.
+
+### [2026-05-26] Simulador Simplificado — Apenas Tipo (Presencial / EAD / Carga Reservada)
+- Autor: Antigravity
+- Branch: ensalamento
+- Arquivos alterados:
+  - `/planejamento-academico/ensalamento.js` (função `renderSimulationLessons`, `updateLesson`, `addLessonToSimulation`, `applyInstitutionalPattern`)
+- Tipo: Simplificação de UI/UX
+- Motivo: O simulador anterior exibia muitos campos por aula (nome de disciplina, período, modo de sala, sala específica, tipo de sala), causando confusão. Como a instituição opera exclusivamente no turno noturno com período fixo (P1+P2 — Noite Inteira) e usa sempre o modo automático (I.A.), esses campos foram removidos.
+- Impacto: Cada aula no simulador exibe apenas um campo: **Tipo** (Presencial / EAD / Carga Reservada). Período é fixado em `[1, 2]` e `roomSelectionMode` é sempre `'auto'`. O padrão Institucional (3+2) funciona como antes.
+- Como testar: Abrir o Simulador, clicar em "Padrão (3+2)" e verificar se cada aula exibe apenas o seletor de Tipo. Adicionar uma aula avulsa e confirmar que não há campos extras.
+- Como reverter: Restaurar a versão anterior de `renderSimulationLessons` com todos os campos.
+
+### [2026-05-26] Correção: Coleção `simulations` liberada na API
+- Autor: Antigravity
+- Branch: ensalamento
+- Arquivos alterados:
+  - `/api/rotas/ensalamento.js` (adicionado `'simulations'` ao array `ALLOWED_COLS`)
+- Tipo: Correção de Bug (403 Forbidden)
+- Motivo: Ao tentar salvar o resultado de uma simulação, a API retornava `403 Coleção não permitida` porque a coleção `simulations` não estava na whitelist de coleções autorizadas do CRUD genérico.
+- Impacto: O simulador agora consegue salvar e recuperar resultados de simulações no Firestore.
+- Como testar: Rodar uma simulação no Simulador e verificar se nenhum erro 403 aparece no console.
+
+### [2026-05-26] Correções de Contraste e Visual no Módulo de Planejamento Acadêmico
+- Autor: Antigravity
+- Branch: ensalamento
+- Arquivos alterados:
+  - `/planejamento-academico/ensalamento.css` (classes `.pill-ead` e `.pill-reservada`)
+  - `/planejamento-academico/ensalamento.js` (texto de turmas na tabela de ocupação, botão deletar)
+  - `/planejamento-academico/index.html` (botão "Ajustar Necessidades" no simulador)
+- Tipo: Correção de UI / Acessibilidade
+- Problemas corrigidos:
+  - **Botão "Ajustar Necessidades"**: Tinha `background: rgba(255,255,255,0.05)` — texto branco em fundo branco/transparente = invisível. Corrigido para `background: #1E293B` (azul marinho escuro).
+  - **Pill EAD**: Sem background, texto amarelo em fundo branco = invisível. Corrigido para `background: #FEF9C3; color: #854D0E`.
+  - **Pill Reservada**: Background roxo muito transparente. Corrigido para `background: #F3E8FF; color: #7E22CE`.
+  - **Nome das turmas na tabela**: Estava `color: rgba(255,255,255,0.4)` (branco em fundo branco). Corrigido para `color: #64748B`.
+  - **Botão deletar na tabela**: Opacidade `0.3` aumentada para `0.6` com hover chegando a `1.0`.
+- Como testar: Acessar a aba Calendário → Mapa de Ocupação e verificar se os pills de EAD e Reservada são legíveis. Verificar se o botão "Ajustar Necessidades" no Simulador está visível.
+
+### [2026-05-26] Gerenciar Acessos: Renomeação e Adição do Módulo Parceiros
+- Autor: Antigravity
+- Branch: ensalamento
+- Arquivos alterados:
+  - `/usuarios/app.js` (array `MODULES` e permissões padrão de novos cargos)
+- Tipo: Atualização de Identidade e Cobertura de Permissões
+- Motivo: O card de módulo na tela de Gerenciar Acessos ainda exibia "Ensalamento" em vez de "Planejamento Acadêmico". Além disso, o módulo "Parceiros" (empresas) não aparecia nos cards de permissão, impossibilitando o controle granular de acesso a ele.
+- Impacto:
+  - O card agora exibe `🏫 Planejamento Acadêmico` (ID interno `ensalamento` mantido).
+  - Novo card `🤝 Parceiros` (ID `empresas`) adicionado à lista.
+  - Novos cargos criados pelo sistema já recebem o campo `empresas: 1` (Sem Acesso) por padrão.
+- Como testar: Acessar Usuários → Gerenciar Acessos e verificar se aparecem os cards de "Planejamento Acadêmico" e "Parceiros".
