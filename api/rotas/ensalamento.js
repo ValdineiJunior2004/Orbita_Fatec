@@ -184,7 +184,7 @@ router.post('/custom/classes/batch', verifyToken, verifyToken.requireModulePermi
 // ==========================================
 // CRUD GENÉRICO DE ENSALAMENTO
 // ==========================================
-const ALLOWED_COLS = ['courses', 'classes', 'rooms', 'calendarEntries', 'disciplines', 'simulations'];
+const ALLOWED_COLS = ['courses', 'classes', 'rooms', 'calendarEntries', 'disciplines', 'simulations', 'courseGroups'];
 
 router.get('/:colName', verifyToken, verifyToken.requireModulePermission('ensalamento'), async (req, res) => {
     try {

@@ -15,11 +15,19 @@ const DEFAULT_WEIGHTS = {
   idealDistributionBonus: 25 // Todas as disciplinas alocadas
 };
 
+const COMMON_DISCIPLINES = [
+  'metodologia cientifica',
+  'competencias e habilidades linguisticas',
+  'empreendedorismo',
+  'educacao em humanidade'
+];
+
 export class SimulationEngine {
-  constructor(rooms, classes, existingEntries) {
+  constructor(rooms, classes, existingEntries, courses = []) {
     this.rooms = rooms.filter(r => r.active);
     this.classes = classes.filter(c => c.active);
     this.existingEntries = existingEntries.filter(e => e.active);
+    this.courses = courses;
     this.weights = DEFAULT_WEIGHTS;
     this.bottlenecks = this.calculateBottlenecks();
   }
@@ -106,32 +114,34 @@ export class SimulationEngine {
   }
 
   areClassesAvailable(classIds, weekday, periods, localAllocations = [], currentClassType = 'presencial') {
-    // Aulas do tipo Carga Reservada não são bloqueantes (não ocupam slot do dia/período)
-    const currentIsBlocking = currentClassType === 'presencial' || currentClassType === 'ead';
-    if (!currentIsBlocking) return true;
-
-    // Verificar globalmente: apenas se o lançamento existente for bloqueante (presencial ou ead)
+    // Verificar globalmente
     const globalConflict = this.existingEntries.some(entry => {
-      const entryType = entry.classType || 'presencial';
-      const entryIsBlocking = entryType === 'presencial' || entryType === 'ead';
-      if (!entryIsBlocking) return false;
-      
       if (entry.weekday !== weekday) return false;
       const entryClassIds = entry.classIds || [entry.classId];
       if (!entryClassIds.some(id => classIds.includes(id))) return false;
+      
+      // Regra de Negócio: Não misturar EAD e Presencial no mesmo dia
+      const entryType = entry.classType || 'presencial';
+      const isEad1 = (entryType === 'ead');
+      const isEad2 = (currentClassType === 'ead');
+      if (isEad1 !== isEad2) return true; // Bloqueia o dia inteiro para misturas
+      
       const entryPeriods = entry.periods || [];
       return entryPeriods.some(p => periods.includes(p));
     });
 
     if (globalConflict) return false;
 
-    // Verificar localmente: apenas se o lançamento alocado localmente for bloqueante (presencial ou ead)
+    // Verificar localmente
     const localConflict = localAllocations.some(alloc => {
-      const allocType = alloc.classType || 'presencial';
-      const allocIsBlocking = allocType === 'presencial' || allocType === 'ead';
-      if (!allocIsBlocking) return false;
-      
       if (alloc.weekday !== weekday) return false;
+      
+      // Regra de Negócio: Não misturar EAD e Presencial no mesmo dia
+      const allocType = alloc.classType || 'presencial';
+      const isEad1 = (allocType === 'ead');
+      const isEad2 = (currentClassType === 'ead');
+      if (isEad1 !== isEad2) return true; // Bloqueia o dia inteiro para misturas
+
       return alloc.periods.some(p => periods.includes(p));
     });
 
@@ -181,6 +191,8 @@ export class SimulationEngine {
     return { valid: true, score, reasons };
   }
 
+
+
   findBestSlot(targetClasses, lesson, localAllocations, context) {
     const classIds = targetClasses.map(t => t.id);
     const requiredCapacity = this.getRequiredCapacity(targetClasses);
@@ -188,11 +200,54 @@ export class SimulationEngine {
     let bestSlot = null;
     let maxScore = -9999;
     
+    // VERIFICAÇÃO DE GRUPO PARA DISCIPLINAS COMUNS EAD
+    let targetGroupDay = null;
+    if (lesson.classType === 'ead' && lesson.disciplineName) {
+      const normalizedLessonName = lesson.disciplineName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      if (COMMON_DISCIPLINES.includes(normalizedLessonName)) {
+        const courseId = targetClasses[0]?.courseId;
+        const currentCourse = this.courses.find(c => c.id === courseId);
+        
+        if (currentCourse && currentCourse.groupId) {
+          // Procurar globalmente
+          for (const entry of this.existingEntries) {
+            if (entry.classType === 'ead' && entry.disciplineName) {
+              const entryNormName = entry.disciplineName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+              if (entryNormName === normalizedLessonName) {
+                const entryCourse = this.courses.find(c => c.id === entry.courseId);
+                if (entryCourse && entryCourse.groupId === currentCourse.groupId) {
+                  targetGroupDay = entry.weekday;
+                  break;
+                }
+              }
+            }
+          }
+          // Procurar localmente
+          if (!targetGroupDay) {
+            for (const alloc of localAllocations) {
+              if (alloc.classType === 'ead' && alloc.disciplineName) {
+                const allocNormName = alloc.disciplineName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+                if (allocNormName === normalizedLessonName) {
+                  targetGroupDay = alloc.weekday;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
     // Apenas Segunda a Sexta. Sábado (6) removido.
     let weekdays = [1, 2, 3, 4, 5].sort(() => 0.5 - Math.random());
+    
+    // Forçar o dia se houver uma regra de grupo EAD
+    if (targetGroupDay) {
+      weekdays = [targetGroupDay];
+    }
 
     for (const day of weekdays) {
-      let availablePeriods = [...(lesson.periods || [1, 2])];
+      let availablePeriods = Array.isArray(lesson.periods) ? [...lesson.periods] : (lesson.periods === 'auto_half' ? [1] : [1, 2]);
       let isAvailable = false;
 
       if (lesson.classType === 'ead') {
@@ -200,14 +255,22 @@ export class SimulationEngine {
         if (eadCountOnDay >= 2) continue; // max 2 EADs per night
 
         if (eadCountOnDay === 0) {
-           isAvailable = this.areClassesAvailable(classIds, day, [1, 2], localAllocations, lesson.classType);
+           isAvailable = this.areClassesAvailable(classIds, day, [1], localAllocations, lesson.classType);
            availablePeriods = [1];
         } else if (eadCountOnDay === 1) {
            isAvailable = this.areClassesAvailable(classIds, day, [2], localAllocations, lesson.classType);
            availablePeriods = [2];
         }
+      } else if (lesson.periods === 'auto_half') {
+         if (this.areClassesAvailable(classIds, day, [1], localAllocations, lesson.classType)) {
+             isAvailable = true;
+             availablePeriods = [1];
+         } else if (this.areClassesAvailable(classIds, day, [2], localAllocations, lesson.classType)) {
+             isAvailable = true;
+             availablePeriods = [2];
+         }
       } else {
-        isAvailable = this.areClassesAvailable(classIds, day, lesson.periods, localAllocations, lesson.classType);
+        isAvailable = this.areClassesAvailable(classIds, day, lesson.periods || [1, 2], localAllocations, lesson.classType);
       }
 
       if (!isAvailable) continue;
@@ -269,21 +332,21 @@ export class SimulationEngine {
 
       if (selectionMode === "required" && selectedRoomId) {
         const room = this.rooms.find(r => r.id === selectedRoomId);
-        if (room && this.isRoomAvailable(room.id, day, lesson.periods, localAllocations)) {
+        if (room && this.isRoomAvailable(room.id, day, availablePeriods, localAllocations)) {
           candidateRooms = [room];
         } else {
           continue; // Sala obrigatória ocupada
         }
       } else if (selectionMode === "preferred" && selectedRoomId) {
         const prefRoom = this.rooms.find(r => r.id === selectedRoomId);
-        if (prefRoom && this.isRoomAvailable(prefRoom.id, day, lesson.periods, localAllocations)) {
+        if (prefRoom && this.isRoomAvailable(prefRoom.id, day, availablePeriods, localAllocations)) {
           candidateRooms = [prefRoom];
         } else {
           warnings.push("Sala preferida ocupada, buscando alternativa");
-          candidateRooms = this.rooms.filter(r => this.isRoomAvailable(r.id, day, lesson.periods, localAllocations));
+          candidateRooms = this.rooms.filter(r => this.isRoomAvailable(r.id, day, availablePeriods, localAllocations));
         }
       } else {
-        candidateRooms = this.rooms.filter(r => this.isRoomAvailable(r.id, day, lesson.periods, localAllocations));
+        candidateRooms = this.rooms.filter(r => this.isRoomAvailable(r.id, day, availablePeriods, localAllocations));
       }
 
       for (const room of candidateRooms) {
@@ -359,6 +422,86 @@ export class SimulationEngine {
     return { score, reasons, warnings };
   }
 
+  generateDiagnostic(targetClasses, lesson, localAllocations) {
+    if (lesson.classType !== 'presencial') {
+      return "Para aulas não presenciais, a restrição geralmente é devido ao excesso de aulas EAD no mesmo dia ou dias já ocupados por outras aulas.";
+    }
+
+    const requiredCapacity = this.getRequiredCapacity(targetClasses);
+    const candidateRooms = this.rooms.filter(r => r.active && Number(r.capacity || 0) >= requiredCapacity);
+
+    if (candidateRooms.length === 0) {
+      return `A turma possui ${requiredCapacity} alunos, mas não há nenhuma sala ativa na instituição com essa capacidade.`;
+    }
+
+    const roomNames = candidateRooms.map(r => r.name).join(', ');
+    let diagnostic = `<div style="margin-bottom: 1rem;">A turma exige espaço para <strong>${requiredCapacity} alunos</strong>. As únicas salas que comportam são: <strong>${roomNames}</strong>.</div><div style="font-weight: 700; color: #881337; margin-bottom: 0.5rem;">Análise dos dias livres:</div><div style="display: flex; flex-direction: column; gap: 0.5rem;">`;
+
+    const classIds = targetClasses.map(t => t.id);
+    let availablePeriods = Array.isArray(lesson.periods) ? [...lesson.periods] : (lesson.periods === 'auto_half' ? [1] : [1, 2]);
+
+    const weekdays = [1, 2, 3, 4, 5];
+    let allDaysBlockedByClasses = true;
+
+    for (const day of weekdays) {
+      const isAvailable = this.areClassesAvailable(classIds, day, availablePeriods, localAllocations, lesson.classType);
+      
+      const dayLabel = ['Seg','Ter','Qua','Qui','Sex'][day-1];
+
+      if (!isAvailable) {
+        diagnostic += `<div style="padding-left: 10px; border-left: 3px solid #FDA4AF; background: #FFF7F8; padding: 6px 10px; border-radius: 0 6px 6px 0;"><strong style="color: #BE123C;">${dayLabel}:</strong> Dia ocupado por outras disciplinas desta mesma turma.</div>`;
+        continue;
+      }
+      allDaysBlockedByClasses = false;
+      
+      const roomIssues = [];
+      for (const room of candidateRooms) {
+        const globalConflict = this.existingEntries.find(entry => {
+          if (entry.weekday !== day) return false;
+          if (entry.roomId !== room.id) return false;
+          const entryPeriods = entry.periods || [];
+          return entryPeriods.some(p => availablePeriods.includes(p));
+        });
+
+        if (globalConflict) {
+          const globalCourse = this.courses.find(c => c.id === globalConflict.courseId);
+          const courseName = globalCourse ? globalCourse.name.toUpperCase() : 'OUTRO CURSO';
+          roomIssues.push(`<strong>${room.name}</strong> <span style="color:#9F1239">(ocupada: ${courseName} - ${globalConflict.disciplineName || 'Aula'})</span>`);
+          continue;
+        }
+
+        const localConflict = localAllocations.find(alloc => {
+          if (alloc.weekday !== day) return false;
+          if (alloc.suggestedRoomId !== room.id) return false;
+          return alloc.periods.some(p => availablePeriods.includes(p));
+        });
+
+        if (localConflict) {
+          const localCourse = this.courses.find(c => c.id === localConflict.courseId);
+          const courseName = localCourse ? localCourse.name.toUpperCase() : 'ESTE CURSO';
+          roomIssues.push(`<strong>${room.name}</strong> <span style="color:#9F1239">(ocupada: ${courseName} - ${localConflict.disciplineName})</span>`);
+          continue;
+        }
+      }
+
+      if (roomIssues.length > 0) {
+        diagnostic += `<div style="padding-left: 10px; border-left: 3px solid #FDA4AF; background: #FFF7F8; padding: 6px 10px; border-radius: 0 6px 6px 0;"><strong style="color: #BE123C;">${dayLabel}:</strong> ${roomIssues.join(', ')}</div>`;
+      } else {
+        diagnostic += `<div style="padding-left: 10px; border-left: 3px solid #FDA4AF; background: #FFF7F8; padding: 6px 10px; border-radius: 0 6px 6px 0;"><strong style="color: #BE123C;">${dayLabel}:</strong> Salas disponíveis, porém descartadas por outras regras de negócio.</div>`;
+      }
+    }
+
+    diagnostic += `</div>`; // fechar div da analise dos dias
+
+    if (allDaysBlockedByClasses) {
+      return `<div style="margin-bottom: 1rem;">A turma possui <strong>${requiredCapacity} alunos</strong>. No entanto, a agenda dos alunos já está totalmente preenchida de Segunda a Sexta por outras aulas da mesma turma.</div>`;
+    }
+
+    diagnostic += `<div style="margin-top: 1rem; padding: 0.8rem; background: #FFE4E6; border-radius: 8px; color: #881337; font-weight: 500;"><strong style="color:#E11D48;">💡 Solução Sugerida:</strong> Mova as disciplinas bloqueantes para outros dias ou realoque cadeiras para a sala temporariamente e edite no sistema.</div>`;
+
+    return diagnostic;
+  }
+
   attemptAllocation(targetClasses, lessons) {
     const allocations = [];
     const context = {
@@ -372,14 +515,15 @@ export class SimulationEngine {
       return (priority[a.classType] || 4) - (priority[b.classType] || 4);
     });
 
-    for (const lesson of sortedLessons) {
+    const shuffledLessons = sortedLessons.sort(() => 0.5 - Math.random());
+
+    for (const lesson of shuffledLessons) {
       if (lesson.selectedRoomId && lesson.roomSelectionMode === "preferred") {
         context.preferredRoomId = lesson.selectedRoomId;
       }
 
       const result = this.findBestSlot(targetClasses, lesson, allocations, context);
-
-      if (result) {
+      if (result && (result.roomId || lesson.classType !== 'presencial')) {
         allocations.push({
           ...lesson,
           weekday: result.weekday,
@@ -393,6 +537,7 @@ export class SimulationEngine {
         });
         if (result.roomId) context.previousRoomIds.push(result.roomId);
       } else {
+        const diagnosticMsg = this.generateDiagnostic(targetClasses, lesson, allocations);
         allocations.push({
           ...lesson,
           weekday: null,
@@ -401,7 +546,8 @@ export class SimulationEngine {
           score: this.weights.unallocatedPenalty,
           reasons: [],
           warnings: [],
-          conflicts: ["Sem horários ou salas disponíveis"]
+          conflicts: ["Sem horários ou salas disponíveis"],
+          diagnostic: diagnosticMsg
         });
       }
     }

@@ -149,10 +149,13 @@ async function autoCleanupCorruptedData() {
   console.log("Limpeza de dados corrompidos concluída.");
 }
 
+let courseGroups = [];
+
 async function loadAllData() {
   courses = await fb.getActive('courses');
   classes = await fb.getActive('classes');
   rooms = await fb.getActive('rooms');
+  courseGroups = await fb.getActive('courseGroups');
   calendarEntries = await fb.getCalendarEntries();
 
   // Executar limpeza automática de períodos importados incorretamente no passado
@@ -236,6 +239,13 @@ function setupEventListeners() {
   // Course Actions
   document.getElementById('btn-add-course').addEventListener('click', () => openCourseModal());
   document.getElementById('form-course').addEventListener('submit', handleCourseSubmit);
+  
+  // Course Groups Actions
+  document.getElementById('btn-manage-groups').addEventListener('click', () => {
+    document.getElementById('modal-course-groups').style.display = 'flex';
+    renderCourseGroups();
+  });
+  document.getElementById('form-course-group').addEventListener('submit', handleCourseGroupSubmit);
 
   // Class Actions
   document.getElementById('btn-add-class').addEventListener('click', () => openClassModal());
@@ -393,20 +403,27 @@ function renderOccupancyTable(container, entries, courseFilter) {
     if (roomFilter && !group.entries.some(e => e.roomId === roomFilter)) return '';
 
     const daysHtml = [1, 2, 3, 4, 5].map(day => {
-      const dayEntry = group.entries.find(e => e.weekday === day);
-      if (!dayEntry) {
-        // Encontrar uma sala válida para este grupo (se houver presencial em outro dia)
-        return `<td><div class="cell-empty" style="cursor:pointer; width:100%; height:40px; display:flex; align-items:center; justify-content:center;" onclick="openManualEntryForSlot('${group.courseId}', '${group.classIds.join(',')}', ${day}, '${presencial?.roomId || ''}')">-</div></td>`;
+      const dayEntries = group.entries.filter(e => e.weekday === day);
+      if (dayEntries.length === 0) {
+        return `<td style="vertical-align: top; padding-top: 15px; padding-bottom: 15px; cursor:pointer;" onclick="openManualEntryForSlot('${group.courseId}', '${group.classIds.join(',')}', ${day}, '${presencial?.roomId || ''}')">
+                  <div style="display:flex; flex-direction:column; align-items:center; width:100%; opacity: 0.5; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'">
+                    <div class="status-pill pill-reservada" title="Adicionar aula manualmente">LIVRE</div>
+                    <div style="font-size:0.6rem; color:#64748B; margin-top:6px; line-height:1.2; text-align:center; padding: 0 4px; text-transform: uppercase; max-width: 90px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">CARGA RESERVADA</div>
+                  </div>
+                </td>`;
       }
 
       let pillClass = '';
       let label = '';
-      let tooltip = '';
-      if (dayEntry.classType === 'presencial') {
-        const room = rooms.find(r => r.id === dayEntry.roomId);
+      const hasPresencial = dayEntries.some(e => e.classType === 'presencial');
+      const hasEad = dayEntries.some(e => e.classType === 'ead');
+      
+      if (hasPresencial) {
+        const pEntry = dayEntries.find(e => e.classType === 'presencial');
+        const room = rooms.find(r => r.id === pEntry.roomId);
         pillClass = 'pill-presencial';
         label = room ? esc(room.name) : 'SALA';
-      } else if (dayEntry.classType === 'ead') {
+      } else if (hasEad) {
         pillClass = 'pill-ead';
         label = 'EAD';
       } else {
@@ -414,11 +431,20 @@ function renderOccupancyTable(container, entries, courseFilter) {
         label = 'RESERVADA';
       }
 
-      if (dayEntry.disciplineName) {
-        tooltip = ` title="${esc(dayEntry.disciplineName)}${dayEntry.notes ? ' - ' + esc(dayEntry.notes) : ''}"`;
-      }
+      const firstId = dayEntries[0].id;
 
-      return `<td><div class="status-pill ${pillClass}"${tooltip} onclick="openManualEntryModalById('${dayEntry.id}')">${label}</div></td>`;
+      const disciplinesHtml = dayEntries.map(e => {
+        if (!e.disciplineName) return '';
+        const tooltip = ` title="${esc(e.disciplineName)}${e.notes ? ' - ' + esc(e.notes) : ''}"`;
+        return `<div ${tooltip} onclick="openManualEntryModalById('${e.id}')" style="cursor:pointer; font-size:0.6rem; font-weight:600; color:#475569; margin-top:6px; line-height:1.2; text-align:center; padding: 0 4px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; width: 100%; max-width: 90px; text-transform: uppercase; transition: color 0.2s;" onmouseover="this.style.color='#2563EB'" onmouseout="this.style.color='#475569'">${esc(e.disciplineName)}</div>`;
+      }).join('');
+
+      return `<td style="vertical-align: top; padding-top: 15px; padding-bottom: 15px;">
+                <div style="display:flex; flex-direction:column; align-items:center; width:100%;">
+                  <div class="status-pill ${pillClass}" onclick="openManualEntryModalById('${firstId}')">${label}</div>
+                  ${disciplinesHtml}
+                </div>
+              </td>`;
     }).join('');
 
     const entryIds = group.entries.map(e => e.id).join(',');
@@ -530,6 +556,7 @@ function openCourseModal(course = null) {
   document.getElementById('course-id').value = course ? course.id : '';
   document.getElementById('course-name').value = course ? course.name : '';
   document.getElementById('course-code').value = course ? course.code : '';
+  document.getElementById('course-group-id').value = course ? (course.groupId || '') : '';
   modal.style.display = 'flex';
 }
 
@@ -538,7 +565,8 @@ async function handleCourseSubmit(e) {
   const id = document.getElementById('course-id').value;
   const data = {
     name: document.getElementById('course-name').value,
-    code: document.getElementById('course-code').value.toUpperCase()
+    code: document.getElementById('course-code').value.toUpperCase(),
+    groupId: document.getElementById('course-group-id').value
   };
 
   if (id) await fb.update('courses', id, data);
@@ -546,6 +574,35 @@ async function handleCourseSubmit(e) {
 
   document.getElementById('modal-course').style.display = 'none';
   await loadAllData();
+}
+
+// --- CRUD: COURSE GROUPS ---
+async function handleCourseGroupSubmit(e) {
+  e.preventDefault();
+  const name = document.getElementById('course-group-name').value;
+  await fb.create('courseGroups', { name });
+  document.getElementById('course-group-name').value = '';
+  courseGroups = await fb.getActive('courseGroups');
+  updateSelects();
+  renderCourseGroups();
+}
+
+window.deleteCourseGroup = async (id) => {
+  if (!confirm('Deseja excluir este grupo?')) return;
+  await fb.remove('courseGroups', id);
+  courseGroups = await fb.getActive('courseGroups');
+  updateSelects();
+  renderCourseGroups();
+};
+
+function renderCourseGroups() {
+  const list = document.getElementById('course-groups-list');
+  list.innerHTML = courseGroups.map(g => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem; border-bottom:1px solid #E2E8F0;">
+      <span style="font-weight:600; color:#1E293B;">${esc(g.name)}</span>
+      <button class="btn-icon" style="color:#EF4444;" onclick="deleteCourseGroup('${g.id}')">Excluir</button>
+    </div>
+  `).join('') || '<div style="color:#64748B; font-size:0.8rem;">Nenhum grupo cadastrado.</div>';
 }
 
 function renderCourses() {
@@ -1176,13 +1233,23 @@ function loadLessonsFromMatrix() {
   
   if (uniqueDisciplines.length > 0) {
     simulationLessons = uniqueDisciplines.map((d, index) => {
-      let classType = d.classType || 'presencial';
+      const lowerName = (d.name || '').toLowerCase();
+      let classType = 'presencial';
+      
       if (d.chPres > 0) {
         classType = 'presencial';
       } else if (d.chEad > 0) {
         classType = 'ead';
+      } else if (d.chExt > 0 || lowerName.includes('projeto integrador') || lowerName.includes('extensão') || lowerName.includes('extensionista')) {
+        classType = 'presencial';
       } else if (d.chTotal > 0) {
         classType = 'carga_reservada';
+      }
+
+      // Aulas de 60h e 80h ocupam a noite toda [1, 2]. As demais ocupam metade ('auto_half')
+      let mappedPeriods = 'auto_half';
+      if (d.chTotal === 60 || d.chTotal === 80 || d.chPres === 60 || d.chPres === 80) {
+        mappedPeriods = [1, 2];
       }
 
       return {
@@ -1191,7 +1258,7 @@ function loadLessonsFromMatrix() {
         disciplineId: d.id || null,
         disciplineName: d.name,
         classType: classType,
-        periods: [1, 2],
+        periods: mappedPeriods,
         roomSelectionMode: 'auto',
         selectedRoomId: '',
         requiredRoomType: '',
@@ -1273,8 +1340,7 @@ function renderSimulationLessons() {
 
 window.updateLesson = (idx, field, value) => {
   simulationLessons[idx][field] = value;
-  // Garantir que período sempre seja noite inteira e modo sempre auto
-  simulationLessons[idx].periods = [1, 2];
+  // Resetar modo de seleção de sala quando o tipo muda
   simulationLessons[idx].roomSelectionMode = 'auto';
   simulationLessons[idx].selectedRoomId = '';
   renderSimulationLessons();
@@ -1307,7 +1373,7 @@ async function runSimulation() {
   btn.disabled = true;
 
   try {
-    const engine = new SimulationEngine(rooms, classes, calendarEntries);
+    const engine = new SimulationEngine(rooms, classes, calendarEntries, courses);
     currentSimulationResults = engine.generateSuggestions(courseId, classIds, simulationLessons);
 
     // Persistir a simulação no Firebase
@@ -1333,6 +1399,30 @@ async function runSimulation() {
   }
 }
 
+window.openDiagnosticsModal = () => {
+  const container = document.getElementById('diagnostics-content-container');
+  if (!currentSimulationResults || currentSimulationResults.length === 0) {
+    container.innerHTML = '<p style="color:#64748B;">Nenhuma simulação rodada recentemente. Clique em "Simular Ensalamento" para gerar diagnósticos.</p>';
+  } else {
+    const firstOption = currentSimulationResults[0];
+    const unallocated = firstOption.allocations.filter(a => a.diagnostic);
+    if (unallocated.length === 0) {
+      container.innerHTML = '<p style="color:#10B981; font-weight:bold;">A simulação foi 100% alocada! Nenhum conflito ou falta de sala foi encontrado.</p>';
+    } else {
+      container.innerHTML = unallocated.map(a => `
+        <div style="margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #E2E8F0;">
+          <h4 style="color:#1E293B; margin-bottom: 0.5rem; text-transform:uppercase;">${esc(a.disciplineName || 'Disciplina Desconhecida')}</h4>
+          <p style="font-size:0.8rem; color:#64748B; margin-bottom:0.5rem; font-weight:600;">
+            ${CLASS_TYPES[a.classType] ? CLASS_TYPES[a.classType].label : a.classType}
+          </p>
+          <div style="font-size:0.85rem; color:#475569; white-space:pre-wrap; line-height:1.5;">${esc(a.diagnostic)}</div>
+        </div>
+      `).join('');
+    }
+  }
+  document.getElementById('modal-diagnostics').style.display = 'flex';
+};
+
 function renderSimulationResults() {
   const container = document.getElementById('sim-results-container');
   
@@ -1347,14 +1437,14 @@ function renderSimulationResults() {
     return;
   }
 
-  container.innerHTML = currentSimulationResults.map((sim, idx) => `
+  container.innerHTML = currentSimulationResults.slice(0, 1).map((sim, idx) => `
     <div class="suggestion-card">
       <div class="suggestion-header">
         <div style="display:flex; align-items:center; gap:1rem;">
           <span class="score-badge score-${sim.status}">${sim.status.toUpperCase()}</span>
           <div>
             <div style="font-weight:900; font-size:1.1rem; color:#1E293B">Score: ${sim.score}</div>
-            <div style="font-size:0.7rem; color:#64748B">OPÇÃO #${idx + 1}</div>
+            <div style="font-size:0.7rem; color:#64748B">SUGESTÃO OTIMIZADA</div>
           </div>
         </div>
         <button class="btn-primary" onclick="exportSimulation('${sim.id}')" style="padding:0.6rem 1.2rem; font-size:0.8rem;">
@@ -1390,19 +1480,20 @@ function renderSimulationResults() {
             const dayLabel = isUnallocated ? 'Não Alocada' : WEEKDAYS[dayKey];
             
             if (allocs.length === 0 && !isUnallocated) {
+              const isBottleneck = sim.status === 'inviavel';
               return `
                 <div class="allocation-day-group" style="display:flex; flex-direction:column; gap:0.5rem; height:100%;">
-                  <div class="allocation-item" style="border-left: 3px solid var(--reservada); background:#F1F5F9; flex: 1; opacity: 0.7;">
+                  <div class="allocation-item" style="border-left: 3px solid ${isBottleneck ? '#EF4444' : 'var(--reservada)'}; background:#F1F5F9; flex: 1; opacity: 0.7;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem">
                       <span style="font-weight:800; font-size:0.65rem; color:#64748B; text-transform:uppercase; letter-spacing:1px;">
                         ${dayLabel}
                       </span>
                     </div>
-                    <div style="font-size:0.9rem; font-weight:700; color:#1E293B; margin-bottom:0.2rem">
-                      Carga Reservada
+                    <div style="font-size:0.9rem; font-weight:700; color:${isBottleneck ? '#EF4444' : '#1E293B'}; margin-bottom:0.2rem">
+                      ${isBottleneck ? 'Sem Salas (Gargalo)' : 'Carga Reservada'}
                     </div>
                     <div style="font-size:0.75rem; color:#64748B">
-                      Dia Livre / Sem Aula
+                      ${isBottleneck ? 'Todas ocupadas' : 'Dia Livre / Sem Aula'}
                     </div>
                   </div>
                 </div>
@@ -1413,11 +1504,12 @@ function renderSimulationResults() {
               <div class="allocation-day-group" style="display:flex; flex-direction:column; gap:0.5rem; height:100%;">
                 ${allocs.map(a => `
                   <div class="allocation-item" style="border-left: 3px solid ${a.classType === 'presencial' ? 'var(--presencial)' : (a.classType === 'ead' ? 'var(--ead)' : 'var(--reservada)')}; background:#F1F5F9; flex: 1;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem">
                       <span style="font-weight:800; font-size:0.65rem; color:#64748B; text-transform:uppercase; letter-spacing:1px;">
                         ${dayLabel}
                       </span>
                     </div>
+                    ${a.disciplineName ? `<div style="font-size:0.75rem; font-weight:600; color:#475569; margin-bottom:0.4rem; word-break:break-word; line-height:1.2;">${esc(a.disciplineName)}</div>` : ''}
                     <div style="font-size:0.9rem; font-weight:700; color:#1E293B; margin-bottom:0.2rem">
                       ${CLASS_TYPES[a.classType] ? CLASS_TYPES[a.classType].label : a.classType}
                     </div>
@@ -1436,6 +1528,27 @@ function renderSimulationResults() {
           }).join('');
         })()}
       </div>
+      
+      ${(() => {
+        const unallocated = sim.allocations.filter(a => a.diagnostic);
+        if (unallocated.length === 0) return '';
+        return `
+          <div style="margin-top:2rem; padding-top:1.5rem; border-top: 1px dashed #CBD5E1;">
+            <h4 style="color:#E11D48; margin-bottom: 1rem; display:flex; align-items:center; gap:0.5rem; text-transform:uppercase; font-size:0.85rem;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+              Relatório de Inviabilidade
+            </h4>
+            ${unallocated.map(a => `
+              <div style="margin-bottom: 1rem; background:#FFF1F2; padding:1rem; border-radius:8px; border-left:4px solid #E11D48;">
+                <h5 style="color:#9F1239; margin-bottom: 0.3rem; font-size:0.85rem; text-transform:uppercase;">${esc(a.disciplineName || 'Disciplina')}</h5>
+                <div style="font-size:0.9rem; color:#BE123C; line-height:1.6; font-family: system-ui, -apple-system, sans-serif;">
+                  ${a.diagnostic}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      })()}
     </div>
   `).join('');
 }
@@ -1560,6 +1673,14 @@ function updateSelects() {
     el.innerHTML = '<option value="">Selecione uma sala</option>' + roomOptions;
     el.value = prev;
   });
+
+  const groupOptions = courseGroups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
+  const groupSelect = document.getElementById('course-group-id');
+  if (groupSelect) {
+    const prev = groupSelect.value;
+    groupSelect.innerHTML = '<option value="">Sem Área Definida</option>' + groupOptions;
+    groupSelect.value = prev;
+  }
 
   // Initial populate of dependent containers
   updateClassCheckboxes(document.getElementById('entry-course-id').value, 'entry-classes-container');

@@ -96,6 +96,10 @@
         <div class="section-header">
           <h2>Cursos Cadastrados</h2>
           <div style="display:flex; gap:1rem;">
+            <button class="btn-primary action-execute" id="btn-manage-groups" style="background:#F1F5F9; color:#475569; border:1px solid #E2E8F0; box-shadow:none;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Áreas/Grupos
+            </button>
             <button class="btn-primary action-execute" id="btn-import-matrix" style="background:white; color:var(--primary-blue); border:1px solid var(--border-color); box-shadow:none;">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               Importar Matriz (.xlsx)
@@ -208,8 +212,32 @@
           <label>Código/Sigla</label>
           <input type="text" id="course-code" class="form-input" required placeholder="Ex: ADS">
         </div>
+        <div class="filter-group" style="margin-bottom:1.5rem">
+          <label>Área / Grupo do Curso (Opcional)</label>
+          <select id="course-group-id" class="form-select">
+            <option value="">Sem Área Definda</option>
+          </select>
+          <p style="font-size:0.7rem; color:#64748B; margin-top:0.3rem;">Usado para agrupar aulas EAD comuns (ex: Saúde, Agrárias).</p>
+        </div>
         <button type="submit" class="btn-primary" style="width:100%">Salvar Curso</button>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: GRUPOS DE CURSOS -->
+  <div id="modal-course-groups" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Gerenciar Áreas / Grupos</h3>
+        <button class="modal-close"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <form id="form-course-group" style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+        <input type="text" id="course-group-name" class="form-input" required placeholder="Ex: Saúde, Agrárias..." style="flex:1;">
+        <button type="submit" class="btn-primary">Adicionar</button>
+      </form>
+      <div id="course-groups-list" style="max-height:300px; overflow-y:auto; border:1px solid #E2E8F0; border-radius:8px; padding:0.5rem;">
+        <!-- Lista de grupos -->
+      </div>
     </div>
   </div>
 
@@ -552,6 +580,27 @@
           <button class="btn-primary modal-close" style="flex: 1; background: rgba(255,255,255,0.05); color: white; border: 1px solid var(--border-color); box-shadow: none;">
             Cancelar
           </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: DIAGNÓSTICOS -->
+  <div id="modal-diagnostics" class="modal-overlay">
+    <div class="modal-content wide" style="max-width: 800px;">
+      <div class="modal-header">
+        <h3 style="color:#E11D48; display:flex; align-items:center; gap:0.5rem;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          Relatório de Diagnóstico
+        </h3>
+        <button class="modal-close"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div style="padding: 1rem 0;">
+        <p style="color:#64748B; margin-bottom:1rem; font-size:0.9rem;">
+          Abaixo estão listadas as turmas que o simulador não conseguiu encaixar na última tentativa, juntamente com o raciocínio detalhado de inviabilidade.
+        </p>
+        <div id="diagnostics-content-container" style="max-height: 500px; overflow-y: auto; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:1rem;">
+          <!-- Diagnostics will be injected here -->
         </div>
       </div>
     </div>
