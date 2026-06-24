@@ -94,4 +94,16 @@ router.put('/:id', verifyToken, verifyToken.requireModulePermission('emprestimo'
     }
 });
 
+// DELETE /api/emprestimos/:id - Exclui o item do banco de dados (para itens temporários)
+router.delete('/:id', verifyToken, verifyToken.requireModulePermission('emprestimo'), async (req, res) => {
+    try {
+        const id = req.params.id;
+        await db.collection('notebooks').doc(id).delete();
+        res.json({ status: 'success', message: `Equipamento ${id} excluído com sucesso.` });
+    } catch (error) {
+        console.error('Erro ao excluir empréstimo:', error);
+        res.status(500).json({ error: 'Erro ao excluir dados.' });
+    }
+});
+
 module.exports = router;

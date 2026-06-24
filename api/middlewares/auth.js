@@ -96,25 +96,33 @@ const requireModulePermission = (moduleName) => {
                 emprestimo: 3,
                 usuarios: 3,
                 ensalamento: 3,
-                'carga-horaria': 3
+                'carga-horaria': 3,
+                turmas: 3,
+                avaliacoes: 3
             },
             ti: {
                 emprestimo: 3,
                 usuarios: 1,
                 ensalamento: 3,
-                'carga-horaria': 1
+                'carga-horaria': 1,
+                turmas: 1,
+                avaliacoes: 1
             },
             rh: {
                 emprestimo: 1,
                 usuarios: 1,
                 ensalamento: 1,
-                'carga-horaria': 3
+                'carga-horaria': 3,
+                turmas: 1,
+                avaliacoes: 1
             },
             visitante: {
                 emprestimo: 2,
                 usuarios: 1,
                 ensalamento: 2,
-                'carga-horaria': 1
+                'carga-horaria': 1,
+                turmas: 1,
+                avaliacoes: 1
             }
         };
 

@@ -507,6 +507,86 @@ function initDashboard() {
   const grid = document.getElementById('notebook-grid');
 
   grid.addEventListener('click', async (e) => {
+    // Pin button or Pinned Comment Click
+    const pinBtn = e.target.closest('.btn-pin');
+    const cardPinnedComment = e.target.closest('.card-pinned-comment');
+    const pinTargetBtn = pinBtn || cardPinnedComment;
+    if (pinTargetBtn) {
+      const id   = pinTargetBtn.dataset.id;
+      const note = notebooksDB.find(n => n.id === id);
+      if (!note) return;
+      
+      const newComment = prompt(`Editar comentário fixado para ${id}:\n(Deixe em branco para remover)`, note.comentarioFixado || "");
+      if (newComment !== null) {
+        note.comentarioFixado = newComment.trim();
+        note.updatedAt = new Date().toISOString();
+        await apiFetch(`/emprestimos/${id}`, { method: 'PUT', body: JSON.stringify(note) });
+        applyFilters(); // Refresh UI
+      }
+      return;
+    }
+
+    // Devolver button
+    const devolverBtn = e.target.closest('.btn-devolver');
+    if (devolverBtn) {
+      const id = devolverBtn.dataset.id;
+      const note = notebooksDB.find(n => n.id === id);
+      if (!note) return;
+      
+      if (note.temporario) {
+        const originalText = devolverBtn.textContent;
+        devolverBtn.textContent = 'Removendo...';
+        devolverBtn.disabled = true;
+
+        try {
+          await apiFetch(`/emprestimos/${id}`, { method: 'DELETE' });
+          await loadNotebooks();
+          applyFilters();
+        } catch (err) {
+          console.error(err);
+          alert('Erro ao excluir item temporário: ' + err.message);
+          devolverBtn.textContent = originalText;
+          devolverBtn.disabled = false;
+        }
+      } else {
+        if (confirm(`Confirmar devolução do item "${id}"?\nEle será marcado como Guardado (Disponível).`)) {
+          const originalText = devolverBtn.textContent;
+          devolverBtn.textContent = 'Processando...';
+          devolverBtn.disabled = true;
+          
+          const userName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Desconhecido';
+          
+          const updatedItem = {
+            ...note,
+            status: 'guardado',
+            local: 'T.I.',
+            sala: '',
+            funcionario: '',
+            setor: '',
+            requerente: '',
+            observacao: 'Devolvido via atalho no painel',
+            responsavel: userName,
+            updatedAt: new Date().toISOString()
+          };
+
+          try {
+            await apiFetch(`/emprestimos/${id}`, {
+              method: 'PUT',
+              body: JSON.stringify(updatedItem)
+            });
+            await loadNotebooks();
+            applyFilters();
+          } catch (err) {
+            console.error(err);
+            alert('Erro ao devolver item: ' + err.message);
+            devolverBtn.textContent = originalText;
+            devolverBtn.disabled = false;
+          }
+        }
+      }
+      return;
+    }
+
     // Lock button
     const lockBtn = e.target.closest('.btn-lock');
     if (lockBtn) {
@@ -597,6 +677,9 @@ function initDashboard() {
       }
     }
   });
+
+  // Registra o form de Empréstimo Rápido
+  setupEmprestimoRapidoForm();
 }
 
 window.fecharModalReserva = function() {
@@ -659,6 +742,255 @@ window.fecharCadastro = function() {
   document.getElementById('form-cadastro').reset();
 };
 
+// ================================================================
+//  EMPRÉSTIMO RÁPIDO — Cadastra e empresta item em um único fluxo
+// ================================================================
+
+function populateERTipoSelect() {
+  const sel = document.getElementById('er-tipo');
+  if (!sel) return;
+  sel.innerHTML = '';
+  categorias.forEach(cat => {
+    const opt = document.createElement('option');
+    opt.value = cat;
+    opt.textContent = cat;
+    sel.appendChild(opt);
+  });
+}
+
+function setupERDestinoToggle() {
+  const radios = document.querySelectorAll('input[name="er-destino"]');
+  const dynFields = document.getElementById('er-dynamic-fields');
+  const salaLabel = document.getElementById('er-dest-sala-label');
+  const funcLabel = document.getElementById('er-dest-func-label');
+
+  function renderDynFields(tipo) {
+    if (!dynFields) return;
+    // Reset visual
+    salaLabel.style.borderColor = 'var(--border-color)';
+    funcLabel.style.borderColor = 'var(--border-color)';
+
+    if (tipo === 'sala') {
+      salaLabel.style.borderColor = 'var(--primary-blue)';
+      dynFields.innerHTML = `
+        <div class="form-group" style="text-align:left; margin-bottom:0;">
+          <label class="form-label">Sala / Laboratório <span style="color:red">*</span></label>
+          <select id="er-sala" class="form-control" required>
+            <option value="">Selecione a sala...</option>
+            ${SALAS.map(s => `<option value="${s}">${s}</option>`).join('')}
+          </select>
+        </div>
+      `;
+    } else if (tipo === 'cedido') {
+      funcLabel.style.borderColor = 'var(--primary-blue)';
+      dynFields.innerHTML = `
+        <div style="display:flex; gap:0.75rem;">
+          <div class="form-group" style="text-align:left; flex:1; margin-bottom:0;">
+            <label class="form-label">Nome do Funcionário <span style="color:red">*</span></label>
+            <input type="text" id="er-funcionario" class="form-control" placeholder="Nome completo...">
+          </div>
+          <div class="form-group" style="text-align:left; flex:1; margin-bottom:0;">
+            <label class="form-label">Setor <span style="color:red">*</span></label>
+            <input type="text" id="er-setor" class="form-control" placeholder="Ex: Biblioteca...">
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  radios.forEach(r => {
+    r.addEventListener('change', () => renderDynFields(r.value));
+  });
+
+  // Trigger initial render for default selected
+  const checked = document.querySelector('input[name="er-destino"]:checked');
+  if (checked) renderDynFields(checked.value);
+}
+
+function setupERIdValidation() {
+  const input = document.getElementById('er-id');
+  const feedback = document.getElementById('er-id-feedback');
+  if (!input || !feedback) return;
+
+  let debounceTimer;
+  input.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      const val = input.value.trim();
+      if (!val) { feedback.style.display = 'none'; return; }
+
+      const exists = notebooksDB.find(n => n.id.toLowerCase() === val.toLowerCase());
+      if (exists) {
+        feedback.style.display = 'block';
+        feedback.style.color = '#ef4444';
+        feedback.innerHTML = `⚠️ Já existe um item com o ID <strong>"${val}"</strong>. Escolha um identificador diferente.`;
+        input.style.borderColor = '#ef4444';
+      } else {
+        feedback.style.display = 'block';
+        feedback.style.color = '#22c55e';
+        feedback.innerHTML = `✅ ID disponível — Item temporário: <strong>"${val}"</strong>`;
+        input.style.borderColor = '#22c55e';
+      }
+    }, 350);
+  });
+}
+
+window.abrirEmprestimoRapido = function() {
+  const modal = document.getElementById('modal-emprestimo-rapido');
+  if (!modal) return;
+
+  // Reset form
+  const form = document.getElementById('form-emprestimo-rapido');
+  if (form) form.reset();
+
+  // Clear dynamic fields
+  const dynFields = document.getElementById('er-dynamic-fields');
+  if (dynFields) dynFields.innerHTML = '';
+
+  // Clear feedback
+  const feedback = document.getElementById('er-id-feedback');
+  if (feedback) { feedback.style.display = 'none'; }
+  const idInput = document.getElementById('er-id');
+  if (idInput) idInput.style.borderColor = '';
+
+  // Reset submit button
+  const submitText = document.getElementById('er-submit-text');
+  const submitBtn = document.getElementById('er-submit-btn');
+  if (submitText) submitText.textContent = '⚡ Emprestar';
+  if (submitBtn) submitBtn.disabled = false;
+
+  modal.classList.add('active');
+
+  // Setup interactions
+  setupERDestinoToggle();
+  setupERIdValidation();
+
+  // Pre-select Sala
+  const salaRadio = document.getElementById('er-dest-sala');
+  if (salaRadio) {
+    salaRadio.checked = true;
+    salaRadio.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  // Focus first field
+  setTimeout(() => { if (idInput) idInput.focus(); }, 100);
+};
+
+window.fecharEmprestimoRapido = function() {
+  document.getElementById('modal-emprestimo-rapido').classList.remove('active');
+};
+
+// Form submit handler for Empréstimo Rápido
+document.addEventListener('DOMContentLoaded', () => {
+  // This is called after DOMContentLoaded for safety, but the event is hoisted below
+});
+
+// We hook into the submit from initDashboard since DOMContentLoaded may have passed
+function setupEmprestimoRapidoForm() {
+  const form = document.getElementById('form-emprestimo-rapido');
+  if (!form || form._erSetup) return;
+  form._erSetup = true;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const id = document.getElementById('er-id').value.trim();
+    const tipo = 'Notebook'; // Default to Notebook to avoid issues, or 'Outros'
+    const requerente = document.getElementById('er-requerente').value.trim();
+    const observacao = document.getElementById('er-observacao').value.trim();
+    const destinoRadio = document.querySelector('input[name="er-destino"]:checked');
+
+    // Validações
+    if (!id || !requerente || !destinoRadio) {
+      alert('Preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    const existing = notebooksDB.find(n => n.id.toLowerCase() === id.toLowerCase());
+    if (existing) {
+      alert(`Já existe um item com o ID "${id}". Por favor, escolha outro identificador.`);
+      return;
+    }
+
+    const destino = destinoRadio.value;
+    let extraFields = {};
+
+    if (destino === 'sala') {
+      const sala = document.getElementById('er-sala')?.value;
+      if (!sala) { alert('Selecione a sala.'); return; }
+      extraFields = { status: 'emprestado', sala, local: 'T.I.' };
+    } else if (destino === 'cedido') {
+      const funcionario = document.getElementById('er-funcionario')?.value.trim();
+      const setor = document.getElementById('er-setor')?.value.trim();
+      if (!funcionario || !setor) { alert('Preencha o nome do funcionário e o setor.'); return; }
+      extraFields = { status: 'cedido', funcionario, setor, local: 'T.I.' };
+    }
+
+    // Disable button
+    const submitBtn = document.getElementById('er-submit-btn');
+    const submitText = document.getElementById('er-submit-text');
+    submitText.textContent = 'Processando...';
+    submitBtn.disabled = true;
+
+    const userName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Desconhecido';
+    const now = new Date().toISOString();
+
+    const newItem = {
+      id,
+      tipo,
+      temQrCode: false,
+      temporario: true, // Flag as temporary item
+      responsavel: userName,
+      requerente,
+      observacao,
+      updatedAt: now,
+      ...extraFields,
+      historico: [{
+        status: extraFields.status,
+        responsavel: userName,
+        requerente,
+        observacao,
+        updatedAt: now,
+        ...(extraFields.sala ? { sala: extraFields.sala } : {}),
+        ...(extraFields.funcionario ? { funcionario: extraFields.funcionario, setor: extraFields.setor } : {}),
+        local: 'T.I.'
+      }]
+    };
+
+    try {
+      await apiFetch(`/emprestimos/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(newItem)
+      });
+
+      window.fecharEmprestimoRapido();
+      await loadNotebooks();
+      applyFilters();
+
+      // Show success feedback
+      const successMsg = document.createElement('div');
+      successMsg.style.cssText = `
+        position:fixed; bottom:24px; right:24px; z-index:9999;
+        background:linear-gradient(135deg,#065f46,#047857); color:white;
+        padding:1rem 1.5rem; border-radius:12px;
+        font-weight:700; font-size:0.9rem; box-shadow:0 8px 24px rgba(0,0,0,0.4);
+        display:flex; align-items:center; gap:0.5rem;
+        animation: slideInRight 0.3s ease;
+      `;
+      successMsg.innerHTML = `<span>✅</span><span>Empréstimo temporário de <strong>${id}</strong> realizado com sucesso!</span>`;
+      document.body.appendChild(successMsg);
+      setTimeout(() => successMsg.remove(), 4000);
+
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao processar Empréstimo Rápido: ' + err.message);
+    } finally {
+      if (submitText) submitText.textContent = '⚡ Emprestar';
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+}
+
 function applyFilters() {
   const s   = document.getElementById('search-input').value.toLowerCase();
   const st  = document.getElementById('filter-status').value;
@@ -667,7 +999,16 @@ function applyFilters() {
   const sa  = document.getElementById('filter-sala').value;
   const filtered = notebooksDB.filter(n => {
     if (s && !n.id.toLowerCase().includes(s)) return false;
-    if (st !== 'Todos' && n.status !== st) return false;
+    
+    // Filtro por status ou temporário
+    if (st !== 'Todos') {
+      if (st === 'temporario') {
+        if (!n.temporario) return false;
+      } else {
+        if (n.status !== st || n.temporario) return false; // Não mostra temporário nos normais se filtrado por status
+      }
+    }
+    
     if (cat !== 'Todos' && n.tipo !== cat) return false;
     if (loc !== 'Todos') { if (n.status !== 'guardado' || n.local !== loc) return false; }
     if (sa !== 'Todos')  { if (n.status !== 'emprestado' || n.sala !== sa) return false; }
@@ -686,8 +1027,14 @@ function renderGrid(list) {
     ? notebooksDB
     : notebooksDB.filter(n => n.tipo === selectedCat);
 
-  const count = { guardado:0, emprestado:0, cedido:0, reservado:0 };
-  statsList.forEach(n => { if(count[n.status] !== undefined) count[n.status]++; });
+  const count = { guardado:0, emprestado:0, cedido:0, reservado:0, temporario:0 };
+  statsList.forEach(n => {
+    if (n.temporario) {
+      count.temporario++;
+    } else {
+      if(count[n.status] !== undefined) count[n.status]++;
+    }
+  });
   
   // Atualiza labels dos cards com o nome da categoria para ficar distinto
   const labels = {
@@ -695,11 +1042,12 @@ function renderGrid(list) {
     guardado: 'Disponíveis',
     emprestado: 'Emprestados',
     cedido: 'Cedidos',
-    reservado: 'Reservados'
+    reservado: 'Reservados',
+    temporario: 'Temporários'
   };
   
   document.querySelectorAll('.status-summary .stat-item').forEach(item => {
-    const filterVal = item.dataset.filter; // "Todos", "guardado", "emprestado", "cedido", "reservado"
+    const filterVal = item.dataset.filter; // "Todos", "guardado", "emprestado", "cedido", "reservado", "temporario"
     const lblEl = item.querySelector('.stat-lbl');
     if (lblEl && filterVal) {
       const baseText = labels[filterVal] || 'Status';
@@ -716,12 +1064,14 @@ function renderGrid(list) {
   const elE = document.getElementById('stat-emprestado');
   const elC = document.getElementById('stat-cedido');
   const elR = document.getElementById('stat-reservado');
+  const elTemp = document.getElementById('stat-temporario');
 
   if(elT) elT.textContent = statsList.length;
   if(elG) elG.textContent = count.guardado;
   if(elE) elE.textContent = count.emprestado;
   if(elC) elC.textContent = count.cedido;
   if(elR) elR.textContent = count.reservado;
+  if(elTemp) elTemp.textContent = count.temporario;
   
   const elGC = document.getElementById('grid-count');
   if(elGC) elGC.textContent = `${list.length} ite${list.length===1?'m':'ns'}`;
@@ -747,12 +1097,19 @@ function renderGrid(list) {
     card.innerHTML = `
       <div class="card-header">
         <div style="display:flex; align-items:center; gap:0.5rem">
-          <span class="card-id" title="${esc(n.tipo || 'Notebook')}">${esc(n.id)} ${n.tipo ? `<span style="font-size:0.75rem; color:var(--text-secondary); font-weight:normal;">(${esc(n.tipo)})</span>` : ''}</span>
+          <span class="card-id" title="${esc(n.tipo || 'Notebook')}">${esc(n.id)} ${n.tipo && !n.temporario ? `<span style="font-size:0.75rem; color:var(--text-secondary); font-weight:normal;">(${esc(n.tipo)})</span>` : ''}</span>
           <span class="badge badge-${n.status}">${esc(n.status.toUpperCase())}</span>
         </div>
-        <button class="btn-lock action-execute ${n.status==='reservado'?'active':''}" data-id="${n.id}" title="${n.status==='reservado'?'Liberar':'Reservar'}" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:5px; display:flex; align-items:center; transition:0.2s">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        </button>
+        <div style="display:flex; align-items:center; gap:0.25rem">
+          ${!n.temporario ? `
+            <button class="btn-pin action-execute" data-id="${n.id}" title="${n.comentarioFixado?'Editar/Remover Comentário':'Fixar Comentário'}" style="background:none; border:none; color:${n.comentarioFixado?'var(--accent-orange)':'var(--text-muted)'}; cursor:pointer; padding:5px; display:flex; align-items:center; transition:0.2s">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.89A.5.5 0 0 0 6.36 14h11.28a.5.5 0 0 0 .25-.56l-1.78-.89a2 2 0 0 1-1.11-1.79V4h-6v6.76zM6 4h12"/></svg>
+            </button>
+            <button class="btn-lock action-execute ${n.status==='reservado'?'active':''}" data-id="${n.id}" title="${n.status==='reservado'?'Liberar':'Reservar'}" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:5px; display:flex; align-items:center; transition:0.2s">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </button>
+          ` : ''}
+        </div>
       </div>
       
       <div class="card-detail">
@@ -765,15 +1122,28 @@ function renderGrid(list) {
         ${n.observacao && n.status !== 'reservado' ? `<div style="margin-top: 5px; font-size: 0.8rem; color: var(--text-muted); font-style: italic;">💬 ${esc(n.observacao)}</div>` : ''}
       </div>
 
+      ${n.comentarioFixado ? `
+      <div class="card-pinned-comment" data-id="${n.id}" style="margin-bottom: 1.25rem; padding: 0.5rem 0.75rem; background: rgba(235, 112, 37, 0.05); border-left: 3px solid var(--accent-orange); border-radius: 6px; font-size: 0.85rem; color: var(--text-main); display: flex; align-items: flex-start; gap: 0.4rem; cursor: pointer;" title="Editar comentário fixado">
+        <span style="font-size: 0.9rem; line-height: 1;">📌</span>
+        <span style="word-break: break-word; font-weight: 500;">${esc(n.comentarioFixado)}</span>
+      </div>` : ''}
+
       <div class="card-footer">
         <span>🕒 ${updateStr}</span>
         <span style="font-weight:700; color:var(--purple-bright)">👤 ${esc(n.responsavel || '---')}</span>
       </div>
 
-        <div class="card-actions">
+      <div class="card-actions">
+        ${n.temporario ? `
+          <button class="btn btn-devolver action-execute" data-id="${n.id}" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; font-weight: 700; border-radius: 8px; flex: 1; width: 100%;">Devolvido</button>
+        ` : `
+          ${(n.status === 'emprestado' || n.status === 'cedido') ? `
+            <button class="btn btn-devolver action-execute" data-id="${n.id}" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; font-weight: 700; border-radius: 8px; flex: 1.2;">Devolvido</button>
+          ` : ''}
           <a href="movimentar.html?id=${n.id}" class="btn btn-secondary action-execute">Movimentar</a>
           ${qrBtnHtml}
-        </div>
+        `}
+      </div>
     `;
     grid.appendChild(card);
   });
@@ -892,6 +1262,12 @@ function initMovimentar() {
   if (cur) cur.checked = true;
   renderFields(noteObj?.status || 'guardado');
 
+  // Pre-fill commentary and observation fields
+  const obsField = document.getElementById('observacao');
+  if (obsField) obsField.value = noteObj?.observacao || '';
+  const cFixField = document.getElementById('comentario-fixado');
+  if (cFixField) cFixField.value = noteObj?.comentarioFixado || '';
+
   radios.forEach(r => r.addEventListener('change', e => renderFields(e.target.value)));
 
   // Submit
@@ -908,6 +1284,7 @@ function initMovimentar() {
     noteObj.responsavel = userName;
     noteObj.updatedAt   = new Date().toISOString();
     noteObj.observacao  = fd.get('observacao') || '';
+    noteObj.comentarioFixado = fd.get('comentarioFixado') || '';
     noteObj.local=''; noteObj.sala=''; noteObj.funcionario=''; noteObj.setor=''; noteObj.requerente='';
 
     let sumHtml = `Status: <b>${status.charAt(0).toUpperCase()+status.slice(1)}</b><br>`;

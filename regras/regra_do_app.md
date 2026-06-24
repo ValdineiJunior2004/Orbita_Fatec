@@ -10,7 +10,7 @@ O Órbita FATEC é um ecossistema de gestão institucional desenvolvido para a F
 - `/api`: Servidor Backend em Node.js (Express) hospedado no Vercel. Contém a lógica de autenticação via Firebase Admin SDK (`firebase.js`) e as rotas para os módulos (`/rotas`).
 - `/auth`: Tela de login e fluxo de redefinição de senha institucional.
 - `/core`: Arquivos compartilhados da arquitetura do Front-end (Firebase Auth, layout, segurança, permissões).
-- `/emprestimo`, `/usuarios`, `/planejamento-academico`, `/rh` (Carga Horária / Funcionários), `/empresas`, `/valida`, `/meu-espaco`, `/fidelidade`: Módulos independentes do sistema consumindo a API REST através da função `apiFetch` (ou endpoint público).
+- `/emprestimo`, `/usuarios`, `/planejamento-academico`, `/rh` (Carga Horária / Funcionários), `/empresas`, `/valida`, `/meu-espaco`, `/fidelidade`, `/turmas`: Módulos independentes do sistema consumindo a API REST através da função `apiFetch` (ou endpoint público).
 - `/regras`: Documentação técnica e logs de alteração.
 
 ## 3. Fluxo de autenticação e Arquitetura REST
@@ -74,6 +74,10 @@ O sistema utiliza Role-Based Access Control (RBAC). Os cargos base definidos em 
 - **Finalidade**: Módulo mobile-first (PWA) que disponibiliza a carteirinha digital do funcionário (FATEC Card) com QR Code auto-regenerativo a cada 30 segundos e acesso rápido às empresas parceiras conveniadas no Clube de Vantagens.
 - **Estrutura**: Localizado em `/fidelidade`, inclui a página do usuário (`index.html`) e a interface de validação (`validar.html`) para lojistas verificarem o status e vigência em tempo real.
 
+### Turmas
+- **Finalidade**: Listagem e gestão de turmas e disciplinas acadêmicas para os docentes.
+- **Backend API**: `/api/rotas/turmas.js` (Lida com coleção `turmas`).
+
 ## 6. Padrão visual
 O sistema segue uma identidade visual institucional "Light Theme" moderna:
 - **Cores Principais**:
@@ -101,6 +105,26 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 - Como reverter:
 
 ## 8. Histórico de alterações
+
+### [2026-05-27] Criação do módulo de Turmas e Categoria Docência
+- Autor: Antigravity
+- Branch: main
+- Arquivos alterados:
+  - `/core/permissions.js` (Adicionado categoria 'docencia' e módulo 'turmas' à configuração estática)
+  - `/usuarios/app.js` (Módulo 'turmas' adicionado ao painel de gerenciamento de permissões)
+  - `/api/middlewares/auth.js` (Configuradas permissões padrão para o módulo 'turmas')
+  - `/api/index.js` (Registradas as rotas do backend `/api/turmas`)
+  - `/regras/regra_do_app.md` (Documentação do novo módulo e logs de alteração)
+- Arquivos criados:
+  - `/api/rotas/turmas.js` (Controlador backend para operações CRUD de turmas)
+  - `/turmas/index.html` (Interface HTML principal do módulo)
+  - `/turmas/app.js` (Lógica frontend do módulo com autenticação e carregamento de turmas)
+  - `/turmas/turmas.css` (Estilos específicos do módulo de turmas)
+- Tipo: Nova Funcionalidade / Expansão do Sistema
+- Motivo: Disponibilizar um módulo de gerenciamento de turmas e disciplinas sob o novo menu "Docência" no menu lateral.
+- Impacto: Novos fluxos de dados acadêmicos disponíveis para administradores e cargos autorizados no ecossistema Órbita FATEC.
+- Como testar: Logar como ADM N1. Expandir o menu lateral na seção "Docência", clicar em "Turmas" e verificar o carregamento de dados de teste (seeding inicial). Criar uma turma, editar e excluir. Validar que as ações de escrita não são permitidas para cargos com nível < 3.
+- Como reverter: Remover a pasta `/turmas`, as rotas em `/api/rotas/turmas.js` e as referências nos arquivos de configuração listados.
 
 ### [2026-05-25] Controle de Acesso por Níveis (1, 2 e 3) e Troca de Senha Obrigatória no Primeiro Acesso
 - Autor: Antigravity
