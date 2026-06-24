@@ -590,30 +590,127 @@ body {
     padding: 1.5rem;
   }
 
-  /* Estilização do botão de Escanear QR como FAB no celular */
-  .btn-scan-qr {
+  /* === Speed Dial FAB (mobile) === */
+  .speed-dial {
     position: fixed !important;
     bottom: 24px !important;
     right: 24px !important;
     z-index: 1000 !important;
-    width: 56px !important;
-    height: 56px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    gap: 0 !important;
+  }
+
+  /* Botão principal */
+  .speed-dial-trigger {
+    width: 58px !important;
+    height: 58px !important;
     border-radius: 50% !important;
-    padding: 0 !important;
+    background: linear-gradient(135deg, #0f4eb8, #2563eb) !important;
+    border: none !important;
+    color: white !important;
+    cursor: pointer !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    box-shadow: 0 6px 20px rgba(15, 78, 184, 0.4) !important;
+    box-shadow: 0 6px 24px rgba(15, 78, 184, 0.45) !important;
+    transition: transform 0.25s, box-shadow 0.25s !important;
+    position: relative !important;
+    z-index: 2 !important;
   }
 
-  .btn-scan-qr span {
+  .speed-dial-trigger:active {
+    transform: scale(0.93) !important;
+  }
+
+  /* Ícones do trigger */
+  .sd-icon-open  { display: block !important; transition: opacity 0.2s, transform 0.25s !important; }
+  .sd-icon-close { display: none  !important; transition: opacity 0.2s, transform 0.25s !important; }
+
+  .speed-dial.open .sd-icon-open  { display: none  !important; }
+  .speed-dial.open .sd-icon-close { display: block !important; }
+  .speed-dial.open .speed-dial-trigger { transform: rotate(45deg) !important; }
+
+  /* Container das sub-ações */
+  .speed-dial-actions {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    gap: 12px !important;
+    margin-bottom: 14px !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+    transform: translateY(16px) !important;
+    transition: opacity 0.22s ease, transform 0.22s ease !important;
+  }
+
+  .speed-dial.open .speed-dial-actions {
+    pointer-events: auto !important;
+    opacity: 1 !important;
+    transform: translateY(0) !important;
+  }
+
+  /* Cada item (label + botão) */
+  .speed-dial-item {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+  }
+
+  .speed-dial-label {
+    background: rgba(15, 20, 40, 0.82) !important;
+    color: #fff !important;
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    padding: 5px 10px !important;
+    border-radius: 8px !important;
+    white-space: nowrap !important;
+    backdrop-filter: blur(6px) !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
+    letter-spacing: 0.01em !important;
+  }
+
+  /* Sub-botões */
+  .speed-dial-btn {
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 50% !important;
+    border: none !important;
+    color: white !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    flex-shrink: 0 !important;
+    transition: transform 0.18s, box-shadow 0.18s !important;
+  }
+
+  .speed-dial-btn:active {
+    transform: scale(0.9) !important;
+  }
+
+  .btn-fast-loan.speed-dial-btn {
+    background: linear-gradient(135deg, #f59e0b, #eb7025) !important;
+    box-shadow: 0 4px 14px rgba(235,112,37,0.4) !important;
+  }
+
+  .btn-scan-qr.speed-dial-btn {
+    background: linear-gradient(135deg, #2563eb, #0f4eb8) !important;
+    box-shadow: 0 4px 14px rgba(15,78,184,0.4) !important;
+  }
+
+  /* Overlay para fechar ao clicar fora */
+  .speed-dial-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 999 !important;
     display: none !important;
   }
 
-  .btn-scan-qr svg {
-    margin: 0 !important;
-    width: 24px !important;
-    height: 24px !important;
+  .speed-dial-overlay.visible {
+    display: block !important;
   }
 
   /* Ajustes dos filtros e busca no celular */
@@ -680,17 +777,21 @@ body {
     margin-top: 0.25rem !important;
     font-weight: 700 !important;
   }
+
+  /* Hover no Speed Dial trigger */
+  .speed-dial-trigger:hover {
+    box-shadow: 0 8px 28px rgba(15, 78, 184, 0.55) !important;
+    transform: scale(1.05) !important;
+  }
+
+  .speed-dial.open .speed-dial-trigger:hover {
+    transform: rotate(45deg) scale(1.05) !important;
+  }
+
 }
 
-.btn-scan-qr {
-  transition: transform 0.2s, box-shadow 0.2s !important;
-}
-
-.btn-scan-qr:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(15, 78, 184, 0.4) !important;
-}
-
-.btn-scan-qr:active {
-  transform: translateY(0) scale(0.95) !important;
-}
+/* Fora do media query: Speed Dial só visível no mobile */
+@media (min-width: 769px) {
+  .speed-dial { display: none !important; }
+  .speed-dial-overlay { display: none !important; }
+}

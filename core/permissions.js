@@ -1,7 +1,8 @@
 export const CATEGORIES = {
   ti: "Gestão de T.I.",
   rh: "Recursos Humanos",
-  admin: "Administrativo"
+  admin: "Administrativo",
+  docencia: "Docência"
 };
 
 export const MODULES = {
@@ -58,17 +59,31 @@ export const MODULES = {
     title: "Parceiros",
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M6 21V7M18 21V7M9 7h6M9 11h6M9 15h6M9 19h6"/></svg>`,
     url: "/empresas/index.html"
+  },
+  turmas: {
+    id: "turmas",
+    category: "docencia",
+    title: "Turmas",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/></svg>`,
+    url: "/turmas/index.html"
+  },
+  avaliacoes: {
+    id: "avaliacoes",
+    category: "docencia",
+    title: "Avaliações",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 14h6"/><path d="M9 16h6"/><path d="M9 10h6"/><path d="M9 12h6"/></svg>`,
+    url: "/avaliacoes/index.html"
   }
 };
 
 export const ROLE_PERMISSIONS = {
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes"]
   },
   ti: {
     label: "T.I.",

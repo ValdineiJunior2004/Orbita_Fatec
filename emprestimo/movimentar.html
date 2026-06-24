@@ -95,7 +95,12 @@
 
               <div class="form-group" style="margin-top: 1.5rem;">
                 <label class="form-label">Observação Adicional</label>
-                <textarea class="form-control" id="observacao" rows="3" placeholder="Ex: Equipamento apresenta risco na tela..."></textarea>
+                <textarea class="form-control" id="observacao" name="observacao" rows="3" placeholder="Ex: Equipamento apresenta risco na tela..."></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">📌 Comentário Fixado (Fica visível no card)</label>
+                <input type="text" class="form-control" id="comentario-fixado" name="comentarioFixado" placeholder="Ex: Teclado falhando, sem carregador...">
               </div>
 
               <button type="submit" class="btn-confirm" id="submit-btn" style="width:100%; padding: 1.1rem; border: none; border-radius: 14px; background: linear-gradient(135deg, var(--secondary-blue), var(--primary-blue)); color: white; font-weight: 700; font-size: 1rem; cursor: pointer; box-shadow: 0 8px 25px rgba(15, 78, 184, 0.25); transition: 0.2s;">
