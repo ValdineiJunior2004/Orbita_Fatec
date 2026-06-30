@@ -794,4 +794,6 @@ body {
 @media (min-width: 769px) {
   .speed-dial { display: none !important; }
   .speed-dial-overlay { display: none !important; }
+  .desktop-quick-actions { display: flex !important; }
+  .desktop-hide { display: none !important; }
 }

@@ -564,7 +564,7 @@ function initDashboard() {
             funcionario: '',
             setor: '',
             requerente: '',
-            observacao: 'Devolvido via atalho no painel',
+            observacao: '',
             responsavel: userName,
             updatedAt: new Date().toISOString()
           };
@@ -1137,9 +1137,6 @@ function renderGrid(list) {
         ${n.temporario ? `
           <button class="btn btn-devolver action-execute" data-id="${n.id}" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; font-weight: 700; border-radius: 8px; flex: 1; width: 100%;">Devolvido</button>
         ` : `
-          ${(n.status === 'emprestado' || n.status === 'cedido') ? `
-            <button class="btn btn-devolver action-execute" data-id="${n.id}" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; font-weight: 700; border-radius: 8px; flex: 1.2;">Devolvido</button>
-          ` : ''}
           <a href="movimentar.html?id=${n.id}" class="btn btn-secondary action-execute">Movimentar</a>
           ${qrBtnHtml}
         `}
