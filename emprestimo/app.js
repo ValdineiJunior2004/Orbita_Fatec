@@ -620,12 +620,23 @@ function initDashboard() {
   // Reserva form
   document.getElementById('form-reserva').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const id     = document.getElementById('reserva-notebook-id').value;
-    const dia    = document.getElementById('reserva-dia').value;
-    const motivo = document.getElementById('reserva-motivo').value;
-    const note   = notebooksDB.find(n => n.id === id);
+    const id         = document.getElementById('reserva-notebook-id').value;
+    const dia        = document.getElementById('reserva-dia').value;
+    const devolucao  = document.getElementById('reserva-devolucao').value;
+    const requerente = document.getElementById('reserva-requerente').value;
+    const motivo     = document.getElementById('reserva-motivo').value;
+    
+    const note = notebooksDB.find(n => n.id === id);
     if (!note) return;
-    note.status='reservado'; note.observacao=motivo; note.updatedAt=new Date().toISOString();
+    
+    note.status = 'reservado'; 
+    note.observacao = motivo;
+    note.dataReserva = dia;
+    note.dataDevolucao = devolucao;
+    note.requerente = requerente;
+    note.updatedAt = new Date().toISOString();
+    note.responsavel = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Desconhecido';
+    
     await apiFetch(`/emprestimos/${id}`, { method: 'PUT', body: JSON.stringify(note) });
     applyFilters();
     fecharModalReserva();
@@ -1085,7 +1096,7 @@ function renderGrid(list) {
     const card = document.createElement('div');
     card.className = 'notebook-card';
     card.dataset.id = n.id;
-    card.style.borderTop = `4px solid var(--c-${n.status})`;
+    card.style.borderTop = `4px solid var(--c-${n.temporario ? 'temporario' : n.status})`;
     card.style.cursor = 'pointer';
 
     const updateStr = n.updatedAt ? new Date(n.updatedAt).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) + ', ' + new Date(n.updatedAt).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : '---';
@@ -1098,7 +1109,7 @@ function renderGrid(list) {
       <div class="card-header">
         <div style="display:flex; align-items:center; gap:0.5rem">
           <span class="card-id" title="${esc(n.tipo || 'Notebook')}">${esc(n.id)} ${n.tipo && !n.temporario ? `<span style="font-size:0.75rem; color:var(--text-secondary); font-weight:normal;">(${esc(n.tipo)})</span>` : ''}</span>
-          <span class="badge badge-${n.status}">${esc(n.status.toUpperCase())}</span>
+          <span class="badge badge-${n.temporario ? 'temporario' : n.status}">${n.temporario ? 'TEMPORÁRIO' : esc(n.status.toUpperCase())}</span>
         </div>
         <div style="display:flex; align-items:center; gap:0.25rem">
           ${!n.temporario ? `
@@ -1116,10 +1127,10 @@ function renderGrid(list) {
         <span>${
           n.status === 'emprestado' ? `🏫 Sala ${esc(n.sala)}` :
           n.status === 'cedido'     ? `👤 ${esc(n.funcionario)} — ${esc(n.setor)}` :
-          n.status === 'reservado'  ? `🔒 ${esc(n.observacao || 'Reservado')}` :
+          n.status === 'reservado'  ? `🔒 ${n.requerente ? `Para: ${esc(n.requerente)} ` : 'Reservado'}${n.dataDevolucao ? `(Até ${n.dataDevolucao.split('-').reverse().join('/')})` : ''}` :
           `📦 ${esc(n.local || 'T.I.')}`
         }</span>
-        ${n.observacao && n.status !== 'reservado' ? `<div style="margin-top: 5px; font-size: 0.8rem; color: var(--text-muted); font-style: italic;">💬 ${esc(n.observacao)}</div>` : ''}
+        ${n.observacao ? `<div style="margin-top: 5px; font-size: 0.8rem; color: var(--text-muted); font-style: italic;">💬 ${esc(n.observacao)}</div>` : ''}
       </div>
 
       ${n.comentarioFixado ? `

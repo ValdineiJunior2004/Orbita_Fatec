@@ -20,6 +20,7 @@
   --c-emprestado: #f59e0b;
   --c-reservado: #3b82f6;
   --c-cedido: #06b6d4;
+  --c-temporario: #eb7025;
 }
 
 * {
@@ -292,6 +293,12 @@ body {
   border: 1px solid rgba(6, 182, 212, 0.3);
 }
 
+.badge-temporario {
+  background: rgba(235, 112, 37, 0.15);
+  color: #eb7025;
+  border: 1px solid rgba(235, 112, 37, 0.3);
+}
+
 .card-detail {
   margin-bottom: 1.5rem;
   font-size: 0.92rem;
@@ -531,6 +538,8 @@ body {
   max-width: 420px;
   text-align: center;
   box-shadow: 0 20px 60px rgba(3, 20, 38, 0.15);
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 
