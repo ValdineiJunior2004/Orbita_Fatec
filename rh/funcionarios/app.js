@@ -336,6 +336,35 @@ function setupModalFuncionario() {
     document.getElementById(`entrada-${t}`).addEventListener('change', () => atualizarCalcTurno(t));
     document.getElementById(`saida-${t}`).addEventListener('change', () => atualizarCalcTurno(t));
   });
+
+  // ---- Seletor de horário padrão ----
+  const PRESETS = {
+    manha_padrao:    [{ id: 'manha', entrada: '07:30', saida: '12:00' }],
+    tarde_padrao:    [{ id: 'tarde', entrada: '13:00', saida: '17:12' }],
+    integral_padrao: [{ id: 'manha', entrada: '08:00', saida: '12:00' },
+                      { id: 'tarde', entrada: '13:00', saida: '17:00' }],
+    manha_tarde:     [{ id: 'manha', entrada: '07:30', saida: '12:00' },
+                      { id: 'tarde', entrada: '13:00', saida: '17:12' }],
+    noite_padrao:    [{ id: 'noite', entrada: '18:30', saida: '22:30' }],
+  };
+
+  document.getElementById('preset-horario').addEventListener('change', function () {
+    const preset = PRESETS[this.value];
+    if (!preset) return;
+    resetarTurnos();
+    preset.forEach(p => {
+      const check    = document.getElementById(`turno-check-${p.id}`);
+      const bloco    = document.getElementById(`bloco-${p.id}`);
+      const horarios = document.getElementById(`horarios-${p.id}`);
+      check.checked = true;
+      bloco.classList.add('ativo');
+      horarios.classList.remove('hidden');
+      document.getElementById(`entrada-${p.id}`).value = p.entrada;
+      document.getElementById(`saida-${p.id}`).value   = p.saida;
+      atualizarCalcTurno(p.id);
+    });
+    this.value = ''; // reseta o select após aplicar
+  });
 }
 
 function abrirModalEditar(id) {
