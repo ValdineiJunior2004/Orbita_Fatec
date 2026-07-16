@@ -106,6 +106,75 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-07-16] Ferida: editar e excluir pacientes
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/ferida.js` (Novo endpoint `DELETE /api/ferida/pacientes/:id`: exclusão definitiva do paciente com remoção em lote das subcoleções `atendimentos` e `fichas_antigas` — o Firestore não apaga subcoleções automaticamente; log de auditoria com uid/e-mail de quem excluiu. O `PUT` de edição já existia e ganhou tela)
+  - `/saude/ferida/index.html` (Botões de editar ✏️ e excluir 🗑️ ao lado do seletor de paciente — aparecem só com paciente selecionado e respeitam RBAC via `action-execute`; modal de paciente reutilizado para edição com campo oculto `pac-id`; upload de fichas antigas oculto no modo edição — a galeria própria já cuida disso)
+  - `/saude/ferida/app.js` (Modal em dois modos novo/editar; submit decide POST ou PUT; exclusão com confirmação DUPLA — confirm com resumo do que será perdido + digitar o nome exato do paciente; após excluir, limpa a ficha e recarrega a lista)
+  - `/saude/ferida/ferida.css` (Estilo `.pac-act` dos botões de ação do paciente)
+- Tipo: Evolução de Funcionalidade
+- Motivo: Faltava gerenciamento de pacientes — só era possível cadastrar. Decisão do usuário: editar e excluir (a opção "mover" foi descartada). Exclusão definitiva atende ao direito de eliminação (LGPD), com dupla confirmação por ser dado de saúde irrecuperável.
+- Impacto: Nenhuma mudança de schema. Exclusão remove o documento do paciente e todas as subcoleções em lotes de 400.
+- Como testar: Selecionar um paciente de teste → ✏️ altera nome/nascimento/município e salva → conferir a lista atualizada. 🗑️ → confirmar o aviso → digitar o nome exato → paciente some da lista e do Firestore (conferir subcoleções apagadas). Digitar nome errado deve cancelar. Com cargo nível 2 (leitura), os botões não aparecem.
+- Como reverter: Remover o endpoint DELETE e os botões/handlers nos arquivos do módulo.
+
+### [2026-07-16] Ferida: formulário digital alinhado à ficha de papel + escala de dor + orientações de exsudato
+- Autor: Claude Code (a pedido do usuário — alinhamento confirmado)
+- Branch: main
+- Arquivos alterados:
+  - `/saude/ferida/index.html` (Novo campo "Pele adjacente (10 a 20 cm)" com as 5 opções do papel; exsudato Tipo ampliado de 3 para os 6 tipos do papel — Seroso, Serosanguinolento, Sanguinolento, Purulento, Seropurulento, Hemopurulento — e Cor ampliada com Rosado e Esverdeado conforme a tabela "Características"; novo campo "Dor" (Sim/Não) com escala de intensidade 1 a 10; a tabela "Quantidade × Indicadores" do papel virou bloco expansível de ORIENTAÇÕES sob o exsudato — é apoio ao preenchimento, não campo)
+  - `/saude/ferida/app.js` (Coleta/aplicação dos novos campos `peleAdjacente` e `dor {presente, escala}`)
+  - `/src/rotas/ferida.js` (Atendimentos armazenam `peleAdjacente[]` e `dor {presente, escala 1-10}` com validação)
+  - `/saude/ferida/ferida.css` (Estilos do bloco de orientações, escala de dor e chips numéricos)
+  - `/leitor-ficha/app.py` (Pele adjacente agora é campo extraído — não mais aviso; os 6 tipos de exsudato mapeiam direto, com cor/consistência derivadas da tabela impressa para todos; dor retorna nula — não existe no papel, preenchimento manual)
+- Tipo: Evolução de Funcionalidade (alinhamento clínico)
+- Motivo: Decisão do usuário de alinhar o formulário digital a tudo que existe na ficha de papel oficial, adicionar a avaliação de dor (Sim/Não + escala 1–10, novidade do digital) e tratar a tabela de indicadores de quantidade como orientação às enfermeiras, não como campo.
+- Impacto: Atendimentos ganham os campos `peleAdjacente` e `dor`. Registros antigos não têm esses campos (leitura tolera ausência). O teste de leitura frente+verso segue 100%: pele adjacente agora chega como campo e preenche os chips automaticamente.
+- Como testar: Abrir a ficha e conferir os novos campos e o bloco "💡 Orientações" sob o exsudato; salvar um atendimento com dor Sim + escala 7 e conferir no Firestore; importar a ficha de teste e verificar os chips de pele adjacente marcados.
+- Como reverter: Remover os campos/blocos novos nos quatro arquivos e o campo no leitor.
+
+### [2026-07-16] Ferida: leitor calibrado para o layout real da ficha + detecção de opções assinaladas
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/leitor-ficha/app.py` (Reescrito com base no PDF oficial "Ficha de Avaliação da Ferida - IMPRIMIR": NOME+DATA na mesma linha, MUNICÍPIO abaixo, dimensões em tabela 2×2 com busca posicional do valor à direita do rótulo, localização, seções delimitadas pelos títulos impressos com separação de colunas — Bordas|Pele adjacente e Infecção superficial|profunda —, conduta = linhas manuscritas após "Enfermeira (o):", e DETECÇÃO DE OPÇÕES ASSINALADAS por dois sinais combinados por linha visual: marca no texto lido ("(X) ...") e análise de tinta na região do checkbox à esquerda do rótulo, com baseline relativa ao próprio grupo e altura de referência mediana — autocalibra por digitalização)
+  - `/leitor-ficha/debug_leitura.py` (Novo utilitário: mostra os itens OCR com posição e as taxas de tinta por opção, para calibrar com digitalizações reais)
+- Tipo: Calibração / Evolução do OCR
+- Motivo: O parser inicial era genérico e falhava no layout real. Com o PDF da ficha oficial, o leitor foi calibrado: em teste com frente+verso simulados (fonte cursiva + marcações X), extraiu 100% dos campos — cabeçalho, dimensões, tecido, bordas, exsudato (tipo com cor/consistência derivadas da tabela impressa + quantidade), sinais de infecção, biofilme (Sim/Não) e conduta. Pele adjacente e os tipos de exsudato sem equivalente digital (Serosanguinolento, Seropurulento, Hemopurulento) vão como avisos nas observações.
+- Impacto: Divergências mapeadas entre a ficha de papel e o formulário digital, pendentes de decisão: o papel tem "Pele adjacente" (5 opções) e 6 tipos de exsudato (o digital tem 3); o papel não tem data de nascimento. A calibração final exige uma digitalização REAL preenchida à mão (letra de caneta em papel — o teste usou fonte cursiva).
+- Como testar: `python debug_leitura.py <imagem>` mostra o que o OCR viu e as taxas de tinta; o fluxo completo via "Importar ficha (OCR)" no módulo.
+- Como reverter: Restaurar a versão anterior de `/leitor-ficha/app.py`.
+
+### [2026-07-16] Ferida: importação de fichas preenchidas com OCR local em Python (frente + verso)
+- Autor: Claude Code
+- Branch: main
+- Arquivos criados:
+  - `/leitor-ficha/app.py` (Serviço Flask + EasyOCR na porta 5001: recebe 1–2 imagens da ficha de papel, faz OCR local em português e extrai por heurística os campos manuscritos — nome, nascimento, município, data do atendimento, localização, dimensões em cm e conduta; o texto completo lido vai em "observações" para conferência)
+  - `/leitor-ficha/requirements.txt` e `/leitor-ficha/README.md` (dependências e instruções: venv Python 3.13, instalação e execução)
+- Arquivos alterados:
+  - `/src/rotas/ferida.js` (Endpoint `POST /api/ferida/ler-ficha` agora faz proxy autenticado — token + RBAC — para o serviço Python local, configurável por `LEITOR_FICHA_URL`; atendimentos aceitam `dataAtendimento` opcional, a data original escrita na ficha de papel)
+  - `/saude/ferida/index.html` + `app.js` + `ferida.css` (Botão "Importar ficha (OCR)" e modal em 3 etapas: fotos frente/verso → leitura → **conferência lado a lado**: a foto da ficha fica visível ao lado dos campos extraídos, todos EDITÁVEIS — nome, nascimento, município, data do atendimento, localização, dimensões e conduta — para a pessoa comparar com o papel e corrigir manualmente o que o OCR errou ou não identificou, com o texto completo lido disponível para consulta; ao aplicar, usa os valores corrigidos: reusa paciente existente pelo nome ou cadastra, anexa as fotos como fichas antigas, pré-preenche o formulário e mostra a localização como lembrete para marcar no mapa; timeline ordena/exibe pela data clínica `dataAtendimento`)
+  - `/.env_exemplo` (Variável opcional `LEITOR_FICHA_URL`) e `/.gitignore` (`leitor-ficha/.venv/`, `__pycache__/`)
+- Tipo: Nova Funcionalidade (OCR local)
+- Motivo: Digitalizar o acervo de fichas de papel do ambulatório sem enviar dado de saúde para APIs externas (LGPD): o OCR roda localmente em Python. Princípio "leitura prepara, humano confirma": a enfermeira revisa tudo antes de salvar. Limitação registrada: o OCR não detecta quais opções impressas foram assinaladas — tecido/bordas/exsudato/infecção/biofilme voltam vazios para marcação manual, e a precisão em manuscrito é parcial.
+- Impacto: Requer o serviço Python rodando (sem ele, o endpoint responde 503 com instrução clara e o restante do módulo funciona normalmente). Em produção (Vercel serverless) o serviço precisa ser hospedado em um servidor próprio/institucional e apontado por `LEITOR_FICHA_URL`. Atendimentos ganham o campo opcional `dataAtendimento`.
+- Como testar: Rodar `leitor-ficha` (README), abrir Gestão Saúde → Ferida → "Importar ficha (OCR)", enviar frente e verso de uma ficha preenchida, conferir a revisão (campos extraídos + texto completo em observações) e aplicar. Verificar: paciente criado/reusado, fotos na galeria "Fichas antigas", formulário pré-preenchido, lembrete de localização sobre o mapa e histórico com a data original após salvar. Com o serviço parado, o botão deve retornar o erro 503 orientando a iniciá-lo.
+- Como reverter: Remover a pasta `/leitor-ficha`, o endpoint `ler-ficha` e o campo `dataAtendimento` em `/src/rotas/ferida.js` e as seções de importação nos três arquivos de `/saude/ferida/`.
+
+### [2026-07-16] Ferida: silhuetas do mapa do corpo mais realistas
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/saude/ferida/index.html` (Silhuetas anterior/posterior redesenhadas como contorno anatômico contínuo — cabeça, pescoço, ombros, braços com mãos, tronco com cintura, pernas e pés; vista posterior ganhou linhas sutis de referência; pés redesenhados em vista superior com os cinco dedos no contorno e proporção realista; CORREÇÃO: rótulos D/E dos pés estavam invertidos — agora seguem a perspectiva de quem olha os próprios pés: E à esquerda, D à direita, dedões voltados ao centro)
+  - `/saude/ferida/ferida.css` (Nova classe `.sil-detalhe` para as linhas de referência do dorso)
+- Tipo: Ajuste de UI
+- Motivo: As silhuetas anteriores eram formas geométricas (círculo + retângulos) e dificultavam a localização precisa da ferida.
+- Impacto: Apenas visual; a lógica de pinos, regiões e dados salvos não muda.
+- Como testar: Abrir Gestão Saúde → Ferida e conferir as três figuras; clicar para marcar pinos e verificar que continuam funcionando.
+- Como reverter: Restaurar os SVGs anteriores no `/saude/ferida/index.html`.
+
 ### [2026-07-15] Ferida: upload das fichas antigas de papel (fotos) anexadas ao paciente
 - Autor: Claude Code
 - Branch: main

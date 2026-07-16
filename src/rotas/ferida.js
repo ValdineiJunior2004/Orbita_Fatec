@@ -72,6 +72,36 @@ router.put('/pacientes/:id', verifyToken, checkPermission, async (req, res) => {
     }
 });
 
+// DELETE /api/ferida/pacientes/:id - Excluir paciente DEFINITIVAMENTE
+// ⚠️ Apaga também os atendimentos e as fichas antigas (subcoleções não
+// são removidas automaticamente pelo Firestore). Irreversível — LGPD:
+// atende ao direito de eliminação do titular.
+router.delete('/pacientes/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const ref = db.collection(COL_PACIENTES).doc(req.params.id);
+        const doc = await ref.get();
+        if (!doc.exists) {
+            return res.status(404).json({ error: 'Paciente não encontrado.' });
+        }
+
+        for (const sub of ['atendimentos', 'fichas_antigas']) {
+            const snap = await ref.collection(sub).get();
+            const docs = [...snap.docs];
+            while (docs.length) {
+                const batch = db.batch();
+                docs.splice(0, 400).forEach(d => batch.delete(d.ref));
+                await batch.commit();
+            }
+        }
+        await ref.delete();
+
+        console.log(`[ferida] Paciente ${req.params.id} excluído por ${req.user.uid} (${req.user.email || ''})`);
+        res.json({ message: 'Paciente excluído definitivamente, com todo o histórico.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ==========================================
 // ATENDIMENTOS (avaliações da ferida)
 // ==========================================
@@ -105,11 +135,14 @@ router.post('/pacientes/:id/atendimentos', verifyToken, checkPermission, async (
             marcacoes,            // [{ numero, regiao, x, y, rotulo }]
             tecido,               // ["Granulação", ...]
             bordas,               // ["Maceração", ...]
+            peleAdjacente,        // ["Íntegra", "Ressecada", ...]
             exsudato,             // { tipo, cor, consistencia, quantidade }
             infeccaoSuperficial,  // ["Odor", ...]
             infeccaoProfunda,     // ["Edema", ...]
             biofilme,             // true | false | null
-            conduta               // texto livre
+            dor,                  // { presente: true|false|null, escala: 1..10|null }
+            conduta,              // texto livre
+            dataAtendimento       // YYYY-MM-DD opcional: data original (ficha de papel importada)
         } = req.body;
 
         const temConteudo =
@@ -117,10 +150,12 @@ router.post('/pacientes/:id/atendimentos', verifyToken, checkPermission, async (
             (dimensoes && Object.values(dimensoes).some(v => v !== null && v !== undefined)) ||
             (Array.isArray(tecido) && tecido.length) ||
             (Array.isArray(bordas) && bordas.length) ||
+            (Array.isArray(peleAdjacente) && peleAdjacente.length) ||
             (exsudato && Object.values(exsudato).some(Boolean)) ||
             (Array.isArray(infeccaoSuperficial) && infeccaoSuperficial.length) ||
             (Array.isArray(infeccaoProfunda) && infeccaoProfunda.length) ||
             biofilme !== null && biofilme !== undefined ||
+            (dor && (typeof dor.presente === 'boolean' || dor.escala)) ||
             (conduta && conduta.trim());
 
         if (!temConteudo) {
@@ -150,6 +185,7 @@ router.post('/pacientes/:id/atendimentos', verifyToken, checkPermission, async (
             })) : [],
             tecido:              Array.isArray(tecido) ? tecido : [],
             bordas:              Array.isArray(bordas) ? bordas : [],
+            peleAdjacente:       Array.isArray(peleAdjacente) ? peleAdjacente : [],
             exsudato: {
                 tipo:         exsudato?.tipo         || null,
                 cor:          exsudato?.cor          || null,
@@ -159,7 +195,12 @@ router.post('/pacientes/:id/atendimentos', verifyToken, checkPermission, async (
             infeccaoSuperficial: Array.isArray(infeccaoSuperficial) ? infeccaoSuperficial : [],
             infeccaoProfunda:    Array.isArray(infeccaoProfunda) ? infeccaoProfunda : [],
             biofilme:            typeof biofilme === 'boolean' ? biofilme : null,
+            dor: {
+                presente: typeof dor?.presente === 'boolean' ? dor.presente : null,
+                escala: (Number.isInteger(dor?.escala) && dor.escala >= 1 && dor.escala <= 10) ? dor.escala : null
+            },
             conduta:             (conduta || '').trim(),
+            dataAtendimento:     (typeof dataAtendimento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dataAtendimento)) ? dataAtendimento : null,
             // Autoria obrigatória (LGPD): quem registrou, quando
             createdAt:     new Date().toISOString(),
             createdBy:     req.user.uid,
@@ -169,6 +210,55 @@ router.post('/pacientes/:id/atendimentos', verifyToken, checkPermission, async (
         res.status(201).json({ message: 'Atendimento registrado com sucesso!', id: newDoc.id });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+
+// ==========================================
+// LEITURA DA FICHA PREENCHIDA (OCR local em Python)
+// ==========================================
+// Proxy para o serviço leitor-ficha (Flask + EasyOCR) que roda
+// localmente — as imagens do paciente não saem da infraestrutura.
+// Princípio LGPD do projeto: "leitura prepara, humano confirma".
+// Ver /leitor-ficha/README.md para instalar e rodar o serviço.
+
+const LEITOR_URL = process.env.LEITOR_FICHA_URL || 'http://127.0.0.1:5001';
+
+// POST /api/ferida/ler-ficha - Lê a ficha de papel (frente/verso) via OCR
+router.post('/ler-ficha', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const { imagens } = req.body;
+        if (!Array.isArray(imagens) || imagens.length < 1 || imagens.length > 2) {
+            return res.status(400).json({ error: 'Envie 1 ou 2 imagens (frente e verso da ficha).' });
+        }
+        for (const img of imagens) {
+            if (typeof img !== 'string' || !img.startsWith('data:image/') || img.length > MAX_IMG_BASE64 * 2) {
+                return res.status(400).json({ error: 'Imagem inválida ou muito grande.' });
+            }
+        }
+
+        let resposta;
+        try {
+            resposta = await fetch(`${LEITOR_URL}/ler-ficha`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imagens }),
+                signal: AbortSignal.timeout(120000)
+            });
+        } catch (err) {
+            return res.status(503).json({
+                error: 'Serviço de leitura indisponível. Inicie o leitor-ficha (Python) — veja /leitor-ficha/README.md.'
+            });
+        }
+
+        const corpo = await resposta.json().catch(() => ({}));
+        if (!resposta.ok) {
+            return res.status(resposta.status === 400 ? 400 : 422)
+                .json({ error: corpo.error || 'Falha na leitura da ficha.' });
+        }
+        res.json(corpo);
+    } catch (err) {
+        res.status(500).json({ error: 'Falha na leitura: ' + err.message });
     }
 });
 

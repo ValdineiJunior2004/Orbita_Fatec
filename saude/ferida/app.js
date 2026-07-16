@@ -24,6 +24,9 @@ let fichasAntigas = [];   // metadados das fichas de papel digitalizadas do paci
 let fichasPendentes = []; // imagens já comprimidas aguardando o cadastro do novo paciente
 let pinCount = 0;
 let dirty = false;
+let dataAtendimentoImportada = null; // data original da ficha de papel importada via IA
+let iaImagens = { frente: null, verso: null };
+let iaDados = null;
 
 async function apiFetch(endpoint, options = {}) {
   const token = await currentUser.getIdToken();
@@ -130,6 +133,7 @@ async function initApp(user, role) {
   setupFormListeners();
   setupPacienteModal();
   setupFichasAntigas();
+  setupImportacaoIA();
   await loadPacientes();
 }
 
@@ -175,6 +179,11 @@ async function selecionarPaciente(id) {
   pacienteAtual = pacientes.find(p => p.id === id) || null;
   const badge = document.getElementById('badge-retorno');
   const btnFichas = document.getElementById('btn-fichas-antigas');
+  const btnEditar = document.getElementById('btn-editar-paciente');
+  const btnExcluir = document.getElementById('btn-excluir-paciente');
+
+  btnEditar.classList.toggle('hidden', !pacienteAtual);
+  btnExcluir.classList.toggle('hidden', !pacienteAtual);
 
   if (!pacienteAtual) {
     document.getElementById('meta-municipio').textContent = '—';
@@ -193,6 +202,9 @@ async function selecionarPaciente(id) {
       apiFetch(`/ferida/pacientes/${id}/atendimentos`),
       apiFetch(`/ferida/pacientes/${id}/fichas-antigas`)
     ]);
+    // Fichas de papel importadas têm data original própria — ordena pela data clínica
+    atendimentos.sort((a, b) =>
+      String(a.dataAtendimento || a.createdAt).localeCompare(String(b.dataAtendimento || b.createdAt)));
   } catch (err) {
     atendimentos = [];
     fichasAntigas = [];
@@ -211,14 +223,31 @@ async function selecionarPaciente(id) {
 
 function setupPacienteModal() {
   const modal = document.getElementById('modal-paciente');
-  document.getElementById('btn-novo-paciente')?.addEventListener('click', () => {
+
+  const abrirModalPaciente = (paciente) => {
     document.getElementById('form-paciente').reset();
-    document.getElementById('pac-municipio').value = 'Ivaiporã';
     fichasPendentes = [];
     renderThumbsPendentes();
+
+    const editando = !!paciente;
+    document.getElementById('pac-id').value = editando ? paciente.id : '';
+    document.getElementById('pac-nome').value = editando ? (paciente.nome || '') : '';
+    document.getElementById('pac-nascimento').value = editando ? (paciente.dataNascimento || '') : '';
+    document.getElementById('pac-municipio').value = editando ? (paciente.municipio || '') : 'Ivaiporã';
+    document.getElementById('modal-paciente-title').textContent = editando ? 'Editar Paciente' : 'Novo Paciente';
+    document.getElementById('btn-salvar-paciente').textContent = editando ? 'Salvar alterações' : 'Cadastrar';
+    // No modo edição as fichas antigas são gerenciadas pela galeria própria
+    document.getElementById('grupo-fichas-novo').classList.toggle('hidden', editando);
+
     modal.classList.remove('hidden');
     document.getElementById('pac-nome').focus();
+  };
+
+  document.getElementById('btn-novo-paciente')?.addEventListener('click', () => abrirModalPaciente(null));
+  document.getElementById('btn-editar-paciente')?.addEventListener('click', () => {
+    if (pacienteAtual) abrirModalPaciente(pacienteAtual);
   });
+  document.getElementById('btn-excluir-paciente')?.addEventListener('click', excluirPaciente);
   document.getElementById('btn-cancelar-paciente')?.addEventListener('click', () => modal.classList.add('hidden'));
   modal?.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
 
@@ -238,24 +267,36 @@ function setupPacienteModal() {
   document.getElementById('form-paciente')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('btn-salvar-paciente');
-    btn.disabled = true;
-    btn.textContent = 'Cadastrando...';
-    try {
-      const resp = await apiFetch('/ferida/pacientes', {
-        method: 'POST',
-        body: JSON.stringify({
-          nome: document.getElementById('pac-nome').value.trim(),
-          dataNascimento: document.getElementById('pac-nascimento').value || null,
-          municipio: document.getElementById('pac-municipio').value.trim()
-        })
-      });
+    const idEdicao = document.getElementById('pac-id').value;
+    const dados = {
+      nome: document.getElementById('pac-nome').value.trim(),
+      dataNascimento: document.getElementById('pac-nascimento').value || null,
+      municipio: document.getElementById('pac-municipio').value.trim()
+    };
 
-      // Anexar as fichas antigas selecionadas
+    btn.disabled = true;
+    btn.textContent = idEdicao ? 'Salvando...' : 'Cadastrando...';
+    try {
+      let pacienteId = idEdicao;
+      if (idEdicao) {
+        await apiFetch(`/ferida/pacientes/${idEdicao}`, {
+          method: 'PUT',
+          body: JSON.stringify(dados)
+        });
+      } else {
+        const resp = await apiFetch('/ferida/pacientes', {
+          method: 'POST',
+          body: JSON.stringify(dados)
+        });
+        pacienteId = resp.id;
+      }
+
+      // Anexar as fichas antigas selecionadas (só no cadastro)
       let enviadas = 0, falhas = 0;
       for (const ficha of fichasPendentes) {
         btn.textContent = `Anexando ficha ${enviadas + falhas + 1}/${fichasPendentes.length}...`;
         try {
-          await apiFetch(`/ferida/pacientes/${resp.id}/fichas-antigas`, {
+          await apiFetch(`/ferida/pacientes/${pacienteId}/fichas-antigas`, {
             method: 'POST',
             body: JSON.stringify({ imagem: ficha.dataUrl, nome: ficha.nome })
           });
@@ -268,20 +309,47 @@ function setupPacienteModal() {
       fichasPendentes = [];
 
       modal.classList.add('hidden');
-      if (falhas) showToast(`Paciente cadastrado, mas ${falhas} imagem(ns) não subiram. Anexe de novo em "Fichas antigas".`, 'error');
+      if (idEdicao) showToast('Dados do paciente atualizados');
+      else if (falhas) showToast(`Paciente cadastrado, mas ${falhas} imagem(ns) não subiram. Anexe de novo em "Fichas antigas".`, 'error');
       else showToast(enviadas ? `Paciente cadastrado com ${enviadas} ficha(s) antiga(s)` : 'Paciente cadastrado');
-      await loadPacientes(resp.id);
+      await loadPacientes(pacienteId);
     } catch (err) {
-      showToast('Erro ao cadastrar: ' + err.message, 'error');
+      showToast('Erro ao salvar: ' + err.message, 'error');
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Cadastrar';
+      btn.textContent = idEdicao ? 'Salvar alterações' : 'Cadastrar';
     }
   });
 
   document.getElementById('sel-paciente')?.addEventListener('change', (e) => {
     selecionarPaciente(e.target.value);
   });
+}
+
+async function excluirPaciente() {
+  if (!pacienteAtual) return;
+  const p = pacienteAtual;
+  const resumo = `${atendimentos.length} atendimento(s) e ${fichasAntigas.length} ficha(s) antiga(s)`;
+
+  if (!confirm(`Excluir DEFINITIVAMENTE o paciente "${p.nome}"?\n\nSerão apagados também ${resumo}. Essa ação NÃO tem volta.`)) return;
+
+  // Confirmação dupla: digitar o nome evita exclusão acidental de dado de saúde
+  const digitado = prompt(`Para confirmar, digite o nome do paciente exatamente como está no cadastro:\n\n${p.nome}`);
+  if (digitado === null) return;
+  if (digitado.trim().toLowerCase() !== p.nome.trim().toLowerCase()) {
+    showToast('Nome não confere — exclusão cancelada.', 'error');
+    return;
+  }
+
+  try {
+    await apiFetch(`/ferida/pacientes/${p.id}`, { method: 'DELETE' });
+    showToast(`Paciente "${p.nome}" excluído definitivamente`);
+    limparFicha();
+    await loadPacientes();
+    await selecionarPaciente('');
+  } catch (err) {
+    showToast('Erro ao excluir: ' + err.message, 'error');
+  }
 }
 
 // ==========================================
@@ -596,6 +664,7 @@ async function salvarAtendimento() {
     marcacoes: coletarMarcacoes(),
     tecido: chipsSelecionados('tecido'),
     bordas: chipsSelecionados('bordas'),
+    peleAdjacente: chipsSelecionados('peleAdjacente'),
     exsudato: {
       tipo:         chipUnico('exsudatoTipo'),
       cor:          chipUnico('exsudatoCor'),
@@ -605,7 +674,12 @@ async function salvarAtendimento() {
     infeccaoSuperficial: chipsSelecionados('infeccaoSuperficial'),
     infeccaoProfunda:    chipsSelecionados('infeccaoProfunda'),
     biofilme: chipUnico('biofilme') === null ? null : chipUnico('biofilme') === 'Sim',
-    conduta: document.getElementById('conduta').value.trim()
+    dor: {
+      presente: chipUnico('dorPresente') === null ? null : chipUnico('dorPresente') === 'Sim',
+      escala: parseInt(chipUnico('dorEscala')) || null
+    },
+    conduta: document.getElementById('conduta').value.trim(),
+    dataAtendimento: dataAtendimentoImportada
   };
 
   const btn = document.getElementById('btn-salvar');
@@ -638,11 +712,244 @@ function limparFicha(manterStatus = false) {
   document.getElementById('conduta').value = '';
   document.querySelectorAll('svg[data-region] .pins').forEach(g => g.innerHTML = '');
   pinCount = 0;
+  dataAtendimentoImportada = null;
+  document.getElementById('loc-hint')?.classList.add('hidden');
   resetEmpty();
   if (!manterStatus) {
     dirty = false;
     document.getElementById('status').textContent = 'Rascunho não salvo';
   }
+}
+
+// ==========================================
+// IMPORTAR FICHA PREENCHIDA (OCR local em Python)
+// Princípio: "leitura prepara, humano confirma" — o OCR só
+// pré-preenche; a enfermeira revisa e salva.
+// ==========================================
+
+function setupImportacaoIA() {
+  const modal = document.getElementById('modal-ia');
+
+  document.getElementById('btn-importar-ficha')?.addEventListener('click', () => {
+    iaImagens = { frente: null, verso: null };
+    iaDados = null;
+    resetSlotsIA();
+    mostrarEtapaIA('fotos');
+    modal.classList.remove('hidden');
+  });
+  document.getElementById('btn-cancelar-ia')?.addEventListener('click', () => modal.classList.add('hidden'));
+  modal?.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+  document.getElementById('btn-voltar-ia')?.addEventListener('click', () => mostrarEtapaIA('fotos'));
+
+  for (const lado of ['frente', 'verso']) {
+    const slot = document.getElementById(`ia-slot-${lado}`);
+    const input = document.getElementById(`ia-file-${lado}`);
+    slot?.addEventListener('click', () => input.click());
+    input?.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      input.value = '';
+      if (!file) return;
+      if (!file.type.startsWith('image/')) { showToast(`"${file.name}" não é uma imagem.`, 'error'); return; }
+      try {
+        iaImagens[lado] = { nome: file.name, dataUrl: await comprimirImagem(file) };
+        const img = slot.querySelector('.ia-slot-preview');
+        img.src = iaImagens[lado].dataUrl;
+        img.classList.remove('hidden');
+        slot.querySelector('.ia-slot-body').classList.add('hidden');
+        slot.classList.add('filled');
+      } catch (err) {
+        showToast(`Não deu pra usar "${file.name}": ${err.message}`, 'error');
+      }
+      document.getElementById('btn-ler-ia').disabled = !iaImagens.frente;
+    });
+  }
+
+  document.getElementById('btn-ler-ia')?.addEventListener('click', lerFichaIA);
+  document.getElementById('btn-aplicar-ia')?.addEventListener('click', aplicarFichaIA);
+}
+
+function resetSlotsIA() {
+  for (const lado of ['frente', 'verso']) {
+    const slot = document.getElementById(`ia-slot-${lado}`);
+    slot.classList.remove('filled');
+    slot.querySelector('.ia-slot-preview').classList.add('hidden');
+    slot.querySelector('.ia-slot-body').classList.remove('hidden');
+  }
+  document.getElementById('btn-ler-ia').disabled = true;
+}
+
+function mostrarEtapaIA(etapa) {
+  for (const e of ['fotos', 'lendo', 'revisao']) {
+    document.getElementById(`ia-etapa-${e}`).classList.toggle('hidden', e !== etapa);
+  }
+}
+
+async function lerFichaIA() {
+  const imagens = [iaImagens.frente, iaImagens.verso].filter(Boolean).map(i => i.dataUrl);
+  if (!imagens.length) return;
+
+  mostrarEtapaIA('lendo');
+  try {
+    const resp = await apiFetch('/ferida/ler-ficha', {
+      method: 'POST',
+      body: JSON.stringify({ imagens })
+    });
+    iaDados = resp.dados;
+    renderRevisaoIA(iaDados);
+    mostrarEtapaIA('revisao');
+  } catch (err) {
+    showToast('Erro na leitura: ' + err.message, 'error');
+    mostrarEtapaIA('fotos');
+  }
+}
+
+const fmtData = (iso) => {
+  if (!iso) return null;
+  const [a, m, d] = iso.split('-');
+  return `${d}/${m}/${a}`;
+};
+
+function renderRevisaoIA(d) {
+  // Fotos da ficha ao lado dos campos, para conferência visual
+  const fotos = document.getElementById('ia-fotos-review');
+  fotos.innerHTML = '';
+  for (const lado of ['frente', 'verso']) {
+    if (!iaImagens[lado]) continue;
+    const label = document.createElement('span');
+    label.className = 'rev-foto-label';
+    label.textContent = lado;
+    const img = document.createElement('img');
+    img.src = iaImagens[lado].dataUrl;
+    img.alt = `Ficha — ${lado}`;
+    fotos.appendChild(label);
+    fotos.appendChild(img);
+  }
+
+  // Campos editáveis pré-preenchidos com o que a leitura identificou.
+  // O que veio vazio/errado a pessoa corrige aqui, olhando a foto.
+  const set = (id, v) => { document.getElementById(id).value = v ?? ''; };
+  const setDim = (id, v) => { document.getElementById(id).value = typeof v === 'number' ? String(v).replace('.', ',') : ''; };
+
+  set('rev-nome', d.paciente?.nome);
+  set('rev-nascimento', d.paciente?.dataNascimento);
+  set('rev-municipio', d.paciente?.municipio || 'Ivaiporã');
+  set('rev-data', d.dataAtendimento);
+  set('rev-localizacao', d.localizacao);
+  setDim('rev-comprimento', d.dimensoes?.comprimento);
+  setDim('rev-largura', d.dimensoes?.largura);
+  setDim('rev-profundidade', d.dimensoes?.profundidade);
+  setDim('rev-descolamento', d.dimensoes?.descolamento);
+  set('rev-conduta', d.conduta);
+
+  document.getElementById('rev-ocr-texto').textContent = d.observacoes || '(nenhum texto lido)';
+  document.getElementById('rev-nome').focus();
+}
+
+async function aplicarFichaIA(e) {
+  if (!iaDados) return;
+  const d = iaDados;
+  const btn = e.currentTarget;
+
+  // Valores CORRIGIDOS pela pessoa na tela de conferência (não os crus da leitura)
+  const val = (id) => document.getElementById(id).value.trim();
+  const nome = val('rev-nome');
+  const nascimento = val('rev-nascimento') || null;
+  const municipio = val('rev-municipio') || 'Ivaiporã';
+  const dataFicha = val('rev-data') || null;
+  const localizacao = val('rev-localizacao');
+  const conduta = val('rev-conduta');
+
+  if (!nome) {
+    showToast('Preencha o nome do paciente antes de aplicar.', 'error');
+    document.getElementById('rev-nome').focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Aplicando...';
+
+  try {
+    // 1. Paciente: usa o existente com o mesmo nome, ou cadastra
+    let pacienteId = null;
+    const existente = pacientes.find(p => p.nome.trim().toLowerCase() === nome.toLowerCase());
+    if (existente) {
+      pacienteId = existente.id;
+    } else {
+      const resp = await apiFetch('/ferida/pacientes', {
+        method: 'POST',
+        body: JSON.stringify({ nome, dataNascimento: nascimento, municipio })
+      });
+      pacienteId = resp.id;
+    }
+
+    // 2. Anexa as fotos como fichas antigas do paciente
+    for (const lado of ['frente', 'verso']) {
+      if (!iaImagens[lado]) continue;
+      try {
+        await apiFetch(`/ferida/pacientes/${pacienteId}/fichas-antigas`, {
+          method: 'POST',
+          body: JSON.stringify({
+            imagem: iaImagens[lado].dataUrl,
+            nome: `ficha-${fmtData(dataFicha) || 'antiga'}-${lado}.jpg`
+          })
+        });
+      } catch (err) {
+        console.error('Falha ao anexar imagem da ficha:', err);
+      }
+    }
+
+    // 3. Seleciona o paciente e pré-preenche o formulário com os valores conferidos
+    await loadPacientes(pacienteId);
+    limparFicha();
+
+    document.getElementById('dim-comprimento').value = val('rev-comprimento');
+    document.getElementById('dim-largura').value = val('rev-largura');
+    document.getElementById('dim-profundidade').value = val('rev-profundidade');
+    document.getElementById('dim-descolamento').value = val('rev-descolamento');
+
+    aplicarChips('tecido', d.tecido);
+    aplicarChips('bordas', d.bordas);
+    aplicarChips('peleAdjacente', d.peleAdjacente || []);
+    aplicarChips('exsudatoTipo', d.exsudato?.tipo ? [d.exsudato.tipo] : []);
+    aplicarChips('exsudatoCor', d.exsudato?.cor ? [d.exsudato.cor] : []);
+    aplicarChips('exsudatoConsistencia', d.exsudato?.consistencia ? [d.exsudato.consistencia] : []);
+    aplicarChips('exsudatoQuantidade', d.exsudato?.quantidade ? [d.exsudato.quantidade] : []);
+    aplicarChips('infeccaoSuperficial', d.infeccaoSuperficial);
+    aplicarChips('infeccaoProfunda', d.infeccaoProfunda);
+    aplicarChips('biofilme', d.biofilme === true ? ['Sim'] : d.biofilme === false ? ['Não'] : []);
+    document.getElementById('conduta').value = conduta;
+
+    dataAtendimentoImportada = dataFicha;
+
+    // Localização vem como texto na ficha de papel — a marcação no mapa é manual
+    const hint = document.getElementById('loc-hint');
+    if (localizacao) {
+      hint.textContent = `📍 A ficha indica: "${localizacao}" — toque no mapa para marcar o local.`;
+      hint.classList.remove('hidden');
+    } else {
+      hint.classList.add('hidden');
+    }
+
+    dirty = true;
+    document.getElementById('status').textContent = dataAtendimentoImportada
+      ? `Preenchido pela leitura (ficha de ${fmtData(dataAtendimentoImportada)}) — revise antes de salvar`
+      : 'Preenchido pela leitura — revise antes de salvar';
+
+    document.getElementById('modal-ia').classList.add('hidden');
+    showToast(existente ? 'Formulário pré-preenchido — revise e salve' : 'Paciente cadastrado e formulário pré-preenchido — revise e salve');
+  } catch (err) {
+    showToast('Erro ao aplicar: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Aplicar no formulário';
+  }
+}
+
+function aplicarChips(field, valores) {
+  if (!Array.isArray(valores)) return;
+  document.querySelectorAll(`.chips[data-field="${field}"] .chip`).forEach(chip => {
+    chip.classList.toggle('on', valores.includes(chip.textContent.trim()));
+  });
 }
 
 // ==========================================
@@ -668,7 +975,9 @@ function renderTimeline(temPaciente) {
   }
 
   atendimentos.forEach((at, i) => {
-    const quando = new Date(at.createdAt).toLocaleDateString('pt-BR');
+    const quando = at.dataAtendimento
+      ? fmtData(at.dataAtendimento)
+      : new Date(at.createdAt).toLocaleDateString('pt-BR');
     const c = fmtDim(at.dimensoes?.comprimento), l = fmtDim(at.dimensoes?.largura);
     const dims = (c && l) ? `${c} × ${l} cm` : 'sem medidas';
 
