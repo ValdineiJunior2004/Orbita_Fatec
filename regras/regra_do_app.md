@@ -106,6 +106,85 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-07-16] Ferida: orientações de biofilme (sinais clínicos e indicadores) da ficha de papel
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/saude/ferida/index.html` (Bloco expansível "💡 Orientações" sob o campo Sim/Não de Biofilme, no mesmo padrão já usado no exsudato: sinais clínicos — substância viscosa/espessa/brilhante, pigmentação amarelada/esverdeada, material gelatinoso que se reforma em 24–48h — e indicadores indiretos — falha no tratamento com antimicrobianos, atraso na cicatrização, ciclos recorrentes, aumento de exsudato, tecido friável, hipergranulação — copiados do verso da ficha oficial)
+- Tipo: Ajuste de UI (apoio ao preenchimento)
+- Motivo: Pedido do usuário — a ficha de papel tem sinais clínicos e indicadores pra ajudar a identificar biofilme, do mesmo jeito que tinha a tabela de indicadores de quantidade de exsudato; são orientação pra enfermeira, não um campo a preencher.
+- Impacto: Nenhuma mudança de schema — é só texto de apoio, fechado por padrão (`<details>`), não altera o que é salvo no atendimento.
+- Como testar: Abrir a ficha, ir até "Biofilme no leito" e clicar em "💡 Orientações para identificar o biofilme" — deve expandir mostrando sinais clínicos e indicadores indiretos.
+- Como reverter: Remover o bloco `<details class="orienta">` do campo biofilme em `index.html`.
+
+### [2026-07-16] Ferida: histórico virou modal separado, aberto só quando há retorno
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/saude/ferida/index.html` (Removida a seção "Histórico do paciente" do fim da grade da ficha; o conteúdo (`#timeline`) foi pro novo `#modal-historico`, no mesmo padrão visual do modal de fichas antigas. Novo botão "Histórico de evolução (N)" na barra do paciente, ao lado de "Fichas antigas")
+  - `/saude/ferida/app.js` (`selecionarPaciente` agora mostra o botão do histórico só quando `atendimentos.length > 0` — ou seja, só se já existe algum retorno registrado; nova função `setupHistoricoModal` abre/fecha o modal)
+  - `/saude/ferida/ferida.css` (Removido o estilo da seção antiga `.hist`; `.timeline` ganhou rolagem própria dentro do modal)
+- Tipo: Ajuste de UI / Evolução de Funcionalidade
+- Motivo: Pedido do usuário — a evolução ficava embutida no fim da ficha, misturada com o formulário do atendimento atual. Separar em um botão que só aparece quando há retorno deixa claro que é uma consulta ao passado, não parte do preenchimento do atendimento de hoje.
+- Impacto: Nenhuma mudança de schema ou de endpoint. No primeiro atendimento de um paciente (sem retornos ainda) o botão não aparece, já que não há histórico pra ver.
+- Como testar: Selecionar um paciente sem atendimentos salvos — o botão não deve aparecer; salvar um atendimento e reabrir o paciente — o botão "Histórico de evolução (1)" deve aparecer na barra e, ao clicar, abrir o modal com a linha do tempo (que por sua vez continua abrindo o detalhe de cada atendimento ao clicar).
+- Como reverter: Devolver a seção `<section class="panel hist">` com `#timeline` pro fim da grade da ficha, remover o botão `#btn-historico` e o `#modal-historico`, e reverter `selecionarPaciente`/`setupHistoricoModal`.
+
+### [2026-07-16] Ferida: histórico ganhou detalhe do atendimento anterior
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/saude/ferida/index.html` (Novo modal `#modal-atendimento`, reaproveitando o estilo `.modal-content.wide` já usado nas fichas antigas)
+  - `/saude/ferida/app.js` (Cada linha do histórico ficou clicável — `renderTimeline` marca a linha como `.tl-clickable` e escuta o clique; nova função `abrirDetalheAtendimento` monta a visão completa daquele atendimento — dimensões, localização, tecido, bordas, pele adjacente, exsudato, infecção superficial/profunda, biofilme, dor e conduta — e `setupDetalheAtendimento` cuida de abrir/fechar o modal)
+  - `/saude/ferida/ferida.css` (Estilo de hover/"Ver detalhes →" nas linhas do histórico e o layout do conteúdo do modal de detalhe)
+- Tipo: Evolução de Funcionalidade / Correção de UX
+- Motivo: Pedido do usuário — o histórico só mostrava um resumo de uma linha (dimensão, um item de tecido, tendência); não dava pra ver o que de fato foi registrado num atendimento anterior.
+- Impacto: Nenhuma mudança de schema nem de endpoint — os dados já vinham no `GET /pacientes/:id/atendimentos`, só não eram exibidos por completo.
+- Como testar: Selecionar um paciente com pelo menos um atendimento salvo, clicar numa linha do histórico e confirmar que abre o modal com todos os campos daquele atendimento específico; fechar pelo botão ou clicando fora.
+- Como reverter: Remover o modal `#modal-atendimento` do HTML, a classe `.tl-clickable`/listener em `renderTimeline` e as funções `abrirDetalheAtendimento`/`setupDetalheAtendimento` do `app.js`.
+
+### [2026-07-16] Ferida: seletor de paciente da ficha virou busca com sugestões
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/ferida.js` (Novo endpoint `GET /api/ferida/pacientes/:id` — busca um paciente específico, usado pra abrir a ficha direto por link e pelo fluxo de importação por OCR)
+  - `/saude/ferida/index.html` (O `<select>` "Paciente" — que carregava todo mundo de uma vez — virou um campo de texto com sugestões: digita o nome e busca no servidor, igual à tela "Pacientes")
+  - `/saude/ferida/app.js` (Removida a função `loadPacientes` que pré-carregava todos os pacientes; `selecionarPaciente` agora recebe o objeto do paciente direto, em vez de um id pra procurar numa lista já carregada; novas funções `setupBuscaPacienteFicha`, `buscarSugestoesFicha`, `escolherPacienteFicha`, `abrirPacientePorId`; a busca por paciente existente no fluxo de importação por OCR agora consulta o servidor em vez do array em memória)
+  - `/saude/ferida/ferida.css` (Estilo do campo de busca e do menu de sugestões, reaproveitando o mesmo visual da tela "Pacientes")
+- Tipo: Evolução de Funcionalidade / Correção de UX
+- Motivo: Pedido do usuário — a lista de todos os pacientes aparecia inteira ao abrir a ficha; o certo era só aparecer conforme a pessoa digitasse o nome, como já funciona na tela "Pacientes".
+- Impacto: Nenhuma mudança de schema. Passar a ficha (`?paciente=ID`), cadastrar, editar, excluir e importar por OCR continuam funcionando, agora todos selecionando o paciente direto pelo objeto retornado da API, sem depender de uma lista completa carregada de antemão.
+- Como testar: Abrir a ficha, digitar ao menos 2 letras de um nome cadastrado e confirmar que só aparecem sugestões compatíveis (não a lista toda); escolher uma e ver a ficha carregar; cadastrar um paciente novo e confirmar que ele é selecionado automaticamente; editar, excluir e importar por OCR e confirmar que cada fluxo ainda seleciona o paciente certo.
+- Como reverter: Restaurar o `<select id="sel-paciente">` no HTML e a função `loadPacientes` no `app.js`, revertendo `selecionarPaciente` para receber um id.
+
+### [2026-07-16] Ferida: busca de pacientes também por município e nascimento
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/ferida.js` (`GET /api/ferida/pacientes?busca=` agora compara o termo contra nome + município + data de nascimento — em ISO `aaaa-mm-dd` e em `dd/mm/aaaa` — não só o nome)
+  - `/saude/ferida/pacientes.html` (Placeholder e subtítulo da busca atualizados pra deixar claro que também busca por município/nascimento)
+- Tipo: Correção/Evolução de Funcionalidade
+- Motivo: A busca só considerava o nome; se a pessoa esquecesse o nome do paciente mas lembrasse a cidade ou a data de nascimento, a busca não encontrava nada.
+- Impacto: Nenhuma mudança de schema. Buscas por data aceitam tanto `12/05/1990` quanto `1990-05-12` ou só parte (ex.: `1990`).
+- Como testar: Na tela "Pacientes", buscar por um município cadastrado e por uma data de nascimento (nos dois formatos) e confirmar que o paciente aparece.
+- Como reverter: Trocar `textoBusca(p).includes(busca)` de volta para `normalizar(p.nome).includes(busca)` em `ferida.js`.
+
+### [2026-07-16] Ferida: tela "Pacientes" com busca por nome no servidor
+- Autor: Claude Code
+- Branch: main
+- Arquivos criados:
+  - `/saude/ferida/pacientes.html` (Nova tela: tabela com todos os pacientes — nome, nascimento/idade, município, data de cadastro — e campo de busca no topo. Reaproveita o mesmo `app.js` do módulo, só pra auth/layout/RBAC e a chamada à API; clicar numa linha abre a ficha do paciente em `index.html?paciente=ID`)
+- Arquivos alterados:
+  - `/src/rotas/ferida.js` (`GET /api/ferida/pacientes` ganhou o parâmetro opcional `?busca=`: filtra por nome no servidor, sem acento/caixa — ex.: "joao" encontra "João". A base do ambulatório é pequena, então lê a coleção toda e filtra em memória, sem exigir índice adicional no Firestore)
+  - `/saude/ferida/app.js` (`initApp` agora detecta em qual tela está — se achar `#tabela-pacientes`, entra no modo lista/busca em vez do modo ficha; a ficha passou a ler `?paciente=ID` da URL pra abrir direto no paciente vindo da lista; busca com debounce de 300ms)
+  - `/saude/ferida/index.html` (Botão "Ver todos os pacientes" no cabeçalho, ao lado de "Importar ficha")
+  - `/saude/ferida/ferida.css` (Estilos da tela de lista: busca, tabela e linha clicável)
+- Tipo: Nova Funcionalidade
+- Motivo: Pedido do usuário — faltava uma tela só de consulta aos cadastros, com busca pelo nome, sem precisar abrir a ficha e catar no seletor.
+- Impacto: Nenhuma mudança de schema. A busca é server-side (chama a API a cada digitação, com debounce) — atende ao pedido explícito de buscar "no banco" em vez de filtrar uma lista já carregada no navegador.
+- Como testar: Abrir "Ver todos os pacientes", digitar parte do nome de um paciente cadastrado (com e sem acento) e conferir que a lista filtra; limpar a busca e conferir que volta a lista completa; clicar numa linha e confirmar que abre a ficha certa já selecionada.
+- Como reverter: Remover `/saude/ferida/pacientes.html`, o parâmetro `busca` em `ferida.js`, o botão em `index.html` e as funções/estilos relacionados em `app.js`/`ferida.css`.
+
 ### [2026-07-16] Ferida: editar e excluir pacientes
 - Autor: Claude Code
 - Branch: main

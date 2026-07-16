@@ -17,7 +17,6 @@ let appInitialized = false;
 let initializedRole = null;
 
 // Estado da ficha
-let pacientes = [];
 let pacienteAtual = null;
 let atendimentos = [];
 let fichasAntigas = [];   // metadados das fichas de papel digitalizadas do paciente atual
@@ -126,6 +125,13 @@ async function initApp(user, role) {
   });
 
   document.getElementById('app').classList.remove('hidden');
+
+  // pacientes.html reaproveita este app.js só pra auth/layout + busca de pacientes
+  if (document.getElementById('tabela-pacientes')) {
+    initPaginaPacientes();
+    return;
+  }
+
   document.getElementById('meta-data').textContent = new Date().toLocaleDateString('pt-BR');
 
   setupBodyMap();
@@ -134,33 +140,148 @@ async function initApp(user, role) {
   setupPacienteModal();
   setupFichasAntigas();
   setupImportacaoIA();
-  await loadPacientes();
+  setupBuscaPacienteFicha();
+  setupDetalheAtendimento();
+  setupHistoricoModal();
+
+  const idPacienteUrl = new URLSearchParams(window.location.search).get('paciente');
+  if (idPacienteUrl) await abrirPacientePorId(idPacienteUrl);
+}
+
+// ==========================================
+// TELA "PACIENTES" (pacientes.html) — lista com busca no servidor
+// ==========================================
+let buscaPacienteTimer = null;
+
+function initPaginaPacientes() {
+  const input = document.getElementById('busca-paciente');
+  buscarEExibirPacientes('');
+  input?.addEventListener('input', () => {
+    clearTimeout(buscaPacienteTimer);
+    buscaPacienteTimer = setTimeout(() => buscarEExibirPacientes(input.value.trim()), 300);
+  });
+}
+
+async function buscarEExibirPacientes(termo) {
+  const tbody = document.getElementById('tabela-pacientes');
+  tbody.innerHTML = `<tr><td colspan="4" class="pac-lista-msg">Buscando...</td></tr>`;
+  try {
+    const qs = termo ? `?busca=${encodeURIComponent(termo)}` : '';
+    const lista = await apiFetch(`/ferida/pacientes${qs}`);
+    renderTabelaPacientes(lista);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" class="pac-lista-msg">Erro ao buscar: ${esc(err.message)}</td></tr>`;
+  }
+}
+
+function renderTabelaPacientes(lista) {
+  const tbody = document.getElementById('tabela-pacientes');
+  if (!lista.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="pac-lista-msg">Nenhum paciente encontrado.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = lista.map(p => {
+    const idade = calcIdade(p.dataNascimento);
+    const nascimento = p.dataNascimento ? new Date(p.dataNascimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+    const cadastro = p.createdAt ? new Date(p.createdAt).toLocaleDateString('pt-BR') : '—';
+    return `
+      <tr class="pac-row" data-id="${p.id}">
+        <td>${esc(p.nome)}</td>
+        <td>${nascimento}${idade !== null ? ` (${idade} anos)` : ''}</td>
+        <td>${esc(p.municipio || '—')}</td>
+        <td>${cadastro}</td>
+      </tr>`;
+  }).join('');
+  tbody.querySelectorAll('.pac-row').forEach(tr => {
+    tr.addEventListener('click', () => {
+      window.location.href = `index.html?paciente=${tr.dataset.id}`;
+    });
+  });
 }
 
 // ==========================================
 // PACIENTES
 // ==========================================
 
-async function loadPacientes(selecionarId = null) {
-  const sel = document.getElementById('sel-paciente');
-  try {
-    pacientes = await apiFetch('/ferida/pacientes');
-    sel.innerHTML = '<option value="">Selecione o paciente...</option>';
-    pacientes.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      const idade = calcIdade(p.dataNascimento);
-      opt.textContent = idade !== null ? `${p.nome} — ${idade} anos` : p.nome;
-      sel.appendChild(opt);
-    });
+// Busca com sugestões (digita o nome, busca no servidor) em vez de
+// carregar todos os pacientes de uma vez — mesmo endpoint da tela "Pacientes".
+let buscaFichaTimer = null;
 
-    if (selecionarId) {
-      sel.value = selecionarId;
-      await selecionarPaciente(selecionarId);
+function setupBuscaPacienteFicha() {
+  const input = document.getElementById('busca-paciente-ficha');
+  const caixa = document.getElementById('pac-sugestoes');
+  if (!input) return;
+
+  input.addEventListener('input', () => {
+    document.getElementById('sel-paciente').value = '';
+    if (pacienteAtual) selecionarPaciente(null);
+
+    const termo = input.value.trim();
+    clearTimeout(buscaFichaTimer);
+    if (termo.length < 2) {
+      caixa.classList.add('hidden');
+      caixa.innerHTML = '';
+      return;
     }
+    buscaFichaTimer = setTimeout(() => buscarSugestoesFicha(termo), 250);
+  });
+
+  input.addEventListener('focus', () => {
+    if (caixa.innerHTML && input.value.trim().length >= 2) caixa.classList.remove('hidden');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (e.target !== input && !caixa.contains(e.target)) caixa.classList.add('hidden');
+  });
+}
+
+async function buscarSugestoesFicha(termo) {
+  const caixa = document.getElementById('pac-sugestoes');
+  try {
+    const lista = await apiFetch(`/ferida/pacientes?busca=${encodeURIComponent(termo)}`);
+    renderSugestoesFicha(lista);
   } catch (err) {
-    sel.innerHTML = '<option value="">Erro ao carregar pacientes</option>';
-    showToast('Erro ao carregar pacientes: ' + err.message, 'error');
+    caixa.innerHTML = `<div class="pac-sug-msg">Erro na busca: ${esc(err.message)}</div>`;
+    caixa.classList.remove('hidden');
+  }
+}
+
+function renderSugestoesFicha(lista) {
+  const caixa = document.getElementById('pac-sugestoes');
+  if (!lista.length) {
+    caixa.innerHTML = '<div class="pac-sug-msg">Nenhum paciente encontrado. Use "Novo Paciente" pra cadastrar.</div>';
+    caixa.classList.remove('hidden');
+    return;
+  }
+  caixa.innerHTML = lista.map((p, i) => {
+    const idade = calcIdade(p.dataNascimento);
+    return `<div class="pac-sug-item" data-i="${i}">
+      ${esc(p.nome)}${idade !== null ? ` — ${idade} anos` : ''}
+      <small>${esc(p.municipio || '—')}</small>
+    </div>`;
+  }).join('');
+  caixa.classList.remove('hidden');
+  caixa.querySelectorAll('.pac-sug-item').forEach(el => {
+    el.addEventListener('click', () => escolherPacienteFicha(lista[parseInt(el.dataset.i)]));
+  });
+}
+
+async function escolherPacienteFicha(paciente) {
+  document.getElementById('busca-paciente-ficha').value = paciente.nome;
+  document.getElementById('sel-paciente').value = paciente.id;
+  const caixa = document.getElementById('pac-sugestoes');
+  caixa.classList.add('hidden');
+  caixa.innerHTML = '';
+  await selecionarPaciente(paciente);
+}
+
+// Abre direto num paciente específico (vindo de pacientes.html?paciente=ID)
+async function abrirPacientePorId(id) {
+  try {
+    const paciente = await apiFetch(`/ferida/pacientes/${id}`);
+    await escolherPacienteFicha(paciente);
+  } catch (err) {
+    showToast('Não foi possível abrir esse paciente: ' + err.message, 'error');
   }
 }
 
@@ -175,20 +296,20 @@ function calcIdade(dataNascimento) {
   return idade;
 }
 
-async function selecionarPaciente(id) {
-  pacienteAtual = pacientes.find(p => p.id === id) || null;
+async function selecionarPaciente(paciente) {
+  pacienteAtual = paciente || null;
   const badge = document.getElementById('badge-retorno');
   const btnFichas = document.getElementById('btn-fichas-antigas');
-  const btnEditar = document.getElementById('btn-editar-paciente');
-  const btnExcluir = document.getElementById('btn-excluir-paciente');
+  const btnHistorico = document.getElementById('btn-historico');
+  const pacActions = document.getElementById('pac-actions');
 
-  btnEditar.classList.toggle('hidden', !pacienteAtual);
-  btnExcluir.classList.toggle('hidden', !pacienteAtual);
+  pacActions.classList.toggle('hidden', !pacienteAtual);
 
   if (!pacienteAtual) {
     document.getElementById('meta-municipio').textContent = '—';
     badge.classList.add('hidden');
     btnFichas.classList.add('hidden');
+    btnHistorico.classList.add('hidden');
     atendimentos = [];
     fichasAntigas = [];
     renderTimeline(false);
@@ -199,8 +320,8 @@ async function selecionarPaciente(id) {
 
   try {
     [atendimentos, fichasAntigas] = await Promise.all([
-      apiFetch(`/ferida/pacientes/${id}/atendimentos`),
-      apiFetch(`/ferida/pacientes/${id}/fichas-antigas`)
+      apiFetch(`/ferida/pacientes/${pacienteAtual.id}/atendimentos`),
+      apiFetch(`/ferida/pacientes/${pacienteAtual.id}/fichas-antigas`)
     ]);
     // Fichas de papel importadas têm data original própria — ordena pela data clínica
     atendimentos.sort((a, b) =>
@@ -217,6 +338,10 @@ async function selecionarPaciente(id) {
 
   document.getElementById('fichas-count').textContent = fichasAntigas.length;
   btnFichas.classList.remove('hidden');
+
+  // Só faz sentido abrir o histórico se já houver algum retorno registrado
+  document.getElementById('historico-count').textContent = atendimentos.length;
+  btnHistorico.classList.toggle('hidden', atendimentos.length === 0);
 
   renderTimeline(true);
 }
@@ -312,17 +437,13 @@ function setupPacienteModal() {
       if (idEdicao) showToast('Dados do paciente atualizados');
       else if (falhas) showToast(`Paciente cadastrado, mas ${falhas} imagem(ns) não subiram. Anexe de novo em "Fichas antigas".`, 'error');
       else showToast(enviadas ? `Paciente cadastrado com ${enviadas} ficha(s) antiga(s)` : 'Paciente cadastrado');
-      await loadPacientes(pacienteId);
+      await escolherPacienteFicha({ id: pacienteId, ...dados });
     } catch (err) {
       showToast('Erro ao salvar: ' + err.message, 'error');
     } finally {
       btn.disabled = false;
       btn.textContent = idEdicao ? 'Salvar alterações' : 'Cadastrar';
     }
-  });
-
-  document.getElementById('sel-paciente')?.addEventListener('change', (e) => {
-    selecionarPaciente(e.target.value);
   });
 }
 
@@ -345,8 +466,9 @@ async function excluirPaciente() {
     await apiFetch(`/ferida/pacientes/${p.id}`, { method: 'DELETE' });
     showToast(`Paciente "${p.nome}" excluído definitivamente`);
     limparFicha();
-    await loadPacientes();
-    await selecionarPaciente('');
+    document.getElementById('busca-paciente-ficha').value = '';
+    document.getElementById('sel-paciente').value = '';
+    await selecionarPaciente(null);
   } catch (err) {
     showToast('Erro ao excluir: ' + err.message, 'error');
   }
@@ -696,7 +818,7 @@ async function salvarAtendimento() {
       'Salvo às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     showToast('Atendimento salvo');
     limparFicha(true);
-    await selecionarPaciente(pacienteAtual.id);
+    await selecionarPaciente(pacienteAtual);
   } catch (err) {
     showToast('Erro ao salvar: ' + err.message, 'error');
   } finally {
@@ -869,18 +991,21 @@ async function aplicarFichaIA(e) {
   btn.textContent = 'Aplicando...';
 
   try {
-    // 1. Paciente: usa o existente com o mesmo nome, ou cadastra
-    let pacienteId = null;
-    const existente = pacientes.find(p => p.nome.trim().toLowerCase() === nome.toLowerCase());
-    if (existente) {
-      pacienteId = existente.id;
-    } else {
+    // 1. Paciente: usa o existente com o mesmo nome (busca no servidor), ou cadastra
+    let pacienteSelecionado = null;
+    try {
+      const achados = await apiFetch(`/ferida/pacientes?busca=${encodeURIComponent(nome)}`);
+      pacienteSelecionado = achados.find(p => p.nome.trim().toLowerCase() === nome.toLowerCase()) || null;
+    } catch (e) { /* segue pro cadastro se a busca falhar */ }
+
+    if (!pacienteSelecionado) {
       const resp = await apiFetch('/ferida/pacientes', {
         method: 'POST',
         body: JSON.stringify({ nome, dataNascimento: nascimento, municipio })
       });
-      pacienteId = resp.id;
+      pacienteSelecionado = { id: resp.id, nome, dataNascimento: nascimento, municipio };
     }
+    const pacienteId = pacienteSelecionado.id;
 
     // 2. Anexa as fotos como fichas antigas do paciente
     for (const lado of ['frente', 'verso']) {
@@ -899,7 +1024,7 @@ async function aplicarFichaIA(e) {
     }
 
     // 3. Seleciona o paciente e pré-preenche o formulário com os valores conferidos
-    await loadPacientes(pacienteId);
+    await escolherPacienteFicha(pacienteSelecionado);
     limparFicha();
 
     document.getElementById('dim-comprimento').value = val('rev-comprimento');
@@ -1000,8 +1125,9 @@ function renderTimeline(temPaciente) {
     const quem = at.createdByName ? `<span class="who">por ${esc(at.createdByName)}</span>` : '';
 
     const row = document.createElement('div');
-    row.className = 'tl';
+    row.className = 'tl tl-clickable';
     row.innerHTML = `<div class="when">${esc(quando)}</div><div class="what"><b>${esc(dims)}</b>${resumo} ${trend}${quem}</div>`;
+    row.addEventListener('click', () => abrirDetalheAtendimento(at));
     tl.appendChild(row);
   });
 
@@ -1009,6 +1135,66 @@ function renderTimeline(temPaciente) {
   hoje.className = 'tl';
   hoje.innerHTML = '<div class="when">Hoje</div><div class="what"><b>em preenchimento…</b></div>';
   tl.appendChild(hoje);
+}
+
+// ==========================================
+// DETALHE DE UM ATENDIMENTO (ver o registro anterior completo)
+// ==========================================
+
+function setupDetalheAtendimento() {
+  const modal = document.getElementById('modal-atendimento');
+  document.getElementById('btn-fechar-atendimento')?.addEventListener('click', () => modal.classList.add('hidden'));
+  modal?.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+}
+
+function setupHistoricoModal() {
+  const modal = document.getElementById('modal-historico');
+  document.getElementById('btn-historico')?.addEventListener('click', () => modal.classList.remove('hidden'));
+  document.getElementById('btn-fechar-historico')?.addEventListener('click', () => modal.classList.add('hidden'));
+  modal?.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+}
+
+function abrirDetalheAtendimento(at) {
+  const quando = at.dataAtendimento
+    ? fmtData(at.dataAtendimento)
+    : new Date(at.createdAt).toLocaleDateString('pt-BR');
+  document.getElementById('modal-atendimento-title').textContent = `Atendimento — ${quando}`;
+
+  const linha = (label, valor) => `<div class="det-linha"><b>${esc(label)}:</b> ${valor}</div>`;
+  const listaOuTraco = arr => (Array.isArray(arr) && arr.length) ? esc(arr.join(', ')) : '—';
+
+  const dims = [
+    fmtDim(at.dimensoes?.comprimento)  && `Compr. ${fmtDim(at.dimensoes.comprimento)} cm`,
+    fmtDim(at.dimensoes?.largura)      && `Larg. ${fmtDim(at.dimensoes.largura)} cm`,
+    fmtDim(at.dimensoes?.profundidade) && `Prof. ${fmtDim(at.dimensoes.profundidade)} cm`,
+    fmtDim(at.dimensoes?.descolamento) && `Descol. ${fmtDim(at.dimensoes.descolamento)} cm`
+  ].filter(Boolean).join(' · ') || '—';
+
+  const locais = (at.marcacoes || []).map(m => m.rotulo).filter(Boolean);
+  const exs = at.exsudato || {};
+  const exsudatoTxt = [exs.tipo, exs.cor, exs.consistencia, exs.quantidade].filter(Boolean).join(' · ') || '—';
+  const biofilmeTxt = at.biofilme === true ? 'Sim' : at.biofilme === false ? 'Não' : '—';
+  const dorTxt = at.dor?.presente === true
+    ? `Sim${at.dor.escala ? ` (${at.dor.escala}/10)` : ''}`
+    : at.dor?.presente === false ? 'Não' : '—';
+
+  document.getElementById('detalhe-atendimento').innerHTML = `
+    <div class="det-grid">
+      ${linha('Dimensões', dims)}
+      ${linha('Localização', listaOuTraco(locais))}
+      ${linha('Tecido', listaOuTraco(at.tecido))}
+      ${linha('Bordas', listaOuTraco(at.bordas))}
+      ${linha('Pele adjacente', listaOuTraco(at.peleAdjacente))}
+      ${linha('Exsudato', esc(exsudatoTxt))}
+      ${linha('Infecção superficial', listaOuTraco(at.infeccaoSuperficial))}
+      ${linha('Infecção profunda', listaOuTraco(at.infeccaoProfunda))}
+      ${linha('Biofilme', biofilmeTxt)}
+      ${linha('Dor', dorTxt)}
+    </div>
+    <div class="det-conduta"><b>Conduta:</b><p>${esc(at.conduta || '—')}</p></div>
+    <div class="det-autor">Registrado por ${esc(at.createdByName || '—')} em ${new Date(at.createdAt).toLocaleString('pt-BR')}</div>
+  `;
+  document.getElementById('modal-atendimento').classList.remove('hidden');
 }
 
 // ==========================================

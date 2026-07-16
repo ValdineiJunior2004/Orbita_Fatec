@@ -14,13 +14,46 @@ const COL_PACIENTES = 'ferida_pacientes';
 // PACIENTES
 // ==========================================
 
+// Remove acentos e caixa para comparar nomes (ex.: "joão" casa com "Joao").
+const DIACRITICOS = new RegExp('[' + String.fromCharCode(0x0300) + '-' + String.fromCharCode(0x036f) + ']', 'g');
+const normalizar = s => String(s || '').normalize('NFD').replace(DIACRITICOS, '').toLowerCase();
+
+// Monta um texto de busca com nome + município + nascimento (ISO e dd/mm/aaaa),
+// pra quem esqueceu o nome do paciente conseguir achar pela cidade ou pela data.
+const textoBusca = p => {
+    const iso = p.dataNascimento || '';
+    const br = iso.includes('-') ? iso.split('-').reverse().join('/') : '';
+    return normalizar([p.nome, p.municipio, iso, br].filter(Boolean).join(' '));
+};
+
 // GET /api/ferida/pacientes - Listar pacientes do ambulatório
+// ?busca=<termo> filtra no servidor por nome, município ou data de nascimento
+// (sem acento/caixa) — a base do ambulatório é pequena, então lê tudo e filtra em memória.
 router.get('/pacientes', verifyToken, checkPermission, async (req, res) => {
     try {
         const snap = await db.collection(COL_PACIENTES).orderBy('nome').get();
-        const pacientes = [];
+        let pacientes = [];
         snap.forEach(doc => pacientes.push({ id: doc.id, ...doc.data() }));
+
+        const busca = normalizar(req.query.busca);
+        if (busca) {
+            pacientes = pacientes.filter(p => textoBusca(p).includes(busca));
+        }
+
         res.json(pacientes);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/ferida/pacientes/:id - Buscar um paciente específico (abrir a ficha direto por link)
+router.get('/pacientes/:id', verifyToken, checkPermission, async (req, res) => {
+    try {
+        const doc = await db.collection(COL_PACIENTES).doc(req.params.id).get();
+        if (!doc.exists) {
+            return res.status(404).json({ error: 'Paciente não encontrado.' });
+        }
+        res.json({ id: doc.id, ...doc.data() });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
