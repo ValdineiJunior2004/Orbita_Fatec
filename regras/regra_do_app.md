@@ -106,6 +106,41 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-07-15] Ferida: upload das fichas antigas de papel (fotos) anexadas ao paciente
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/ferida.js` (Novos endpoints: listar metadados, ver imagem completa, anexar e excluir em `ferida_pacientes/{id}/fichas_antigas`; validação de tipo/tamanho — data URL de imagem até ~950 mil chars, respeitando o limite de 1 MiB por documento do Firestore; autoria obrigatória em cada anexo)
+  - `/saude/ferida/index.html` (Zona de upload com arrastar-e-soltar no modal Novo Paciente com pré-visualização; botão "Fichas antigas (N)" na barra do paciente; modal galeria com lista, visualização da imagem, adicionar e excluir)
+  - `/saude/ferida/app.js` (Compressão de imagem no navegador via canvas — reduz resolução/qualidade em etapas até caber no limite do banco; envio das imagens após o cadastro do paciente; galeria de fichas antigas do paciente selecionado)
+  - `/saude/ferida/ferida.css` (Estilos da zona de upload, miniaturas, galeria e visualizador)
+  - `/regras/regra_do_app.md` (Documentação)
+- Tipo: Nova Funcionalidade
+- Motivo: O ambulatório tem fichas de papel preenchidas antes da digitalização. Ao cadastrar o paciente no sistema, a enfermeira fotografa/anexa as fichas antigas, preservando o histórico completo do paciente (fichas de papel + atendimentos digitais + retornos) em um único lugar.
+- Impacto: Nova subcoleção Firestore `ferida_pacientes/{id}/fichas_antigas` (imagem base64 comprimida + metadados + autoria). A listagem retorna só metadados; a imagem completa é buscada sob demanda ao clicar em "Ver".
+- Como testar: Em Gestão Saúde → Ferida, clicar em "Novo Paciente", preencher o nome e adicionar 1+ fotos na zona de upload; cadastrar. Selecionar o paciente e clicar em "Fichas antigas (N)" — ver a imagem, anexar mais uma e excluir uma. Conferir que com cargo nível 2 (leitura) os botões de anexar/excluir ficam ocultos.
+- Como reverter: Remover os endpoints de fichas-antigas em `/src/rotas/ferida.js` e as seções correspondentes nos três arquivos de `/saude/ferida/`.
+
+### [2026-07-15] Criação da categoria Gestão Saúde e do módulo Ferida (Ficha de Avaliação da Ferida)
+- Autor: Claude Code
+- Branch: main
+- Arquivos criados:
+  - `/saude/ferida/index.html` (Ficha de Avaliação da Ferida — mapa do corpo SVG clicável com pinos numerados, dimensões, tecido do leito, bordas, exsudato, sinais de infecção, biofilme, conduta e histórico de evolução)
+  - `/saude/ferida/ferida.css` (Estilos do módulo seguindo o esboço aprovado do ambulatório: paleta petróleo/turquesa e marcador clínico próprio nos pinos)
+  - `/saude/ferida/app.js` (Auth guard padrão, seleção/cadastro de paciente, marcação no mapa do corpo, coleta da ficha, salvamento e timeline de evolução com tendência melhora/estável/piora por área)
+  - `/src/rotas/ferida.js` (API REST: CRUD de pacientes em `ferida_pacientes` e atendimentos em subcoleção `atendimentos`, com autoria obrigatória — uid, nome e data/hora em cada registro)
+- Arquivos alterados:
+  - `/core/permissions.js` (Nova categoria `saude` — "Gestão Saúde" — e módulo `ferida` atribuído a ADM N1/N2)
+  - `/src/middlewares/auth.js` (Permissões padrão do módulo `ferida`: ADM N2 = 3; TI, RH e Visitante = 1 — dado de saúde é sensível, acesso só para cargos autorizados)
+  - `/usuarios/app.js` (Módulo `ferida` no painel de gerenciamento de permissões e nos defaults de novo cargo)
+  - `/api/index.js` (Registro das rotas `/api/ferida`)
+  - `/regras/regra_do_app.md` (Documentação)
+- Tipo: Nova Funcionalidade / Novo Módulo
+- Motivo: Substituir a ficha de papel do ambulatório da FATEC Ivaiporã por um mini-prontuário digital de feridas, permitindo que as enfermeiras registrem o atendimento e acompanhem a evolução da ferida do paciente ao longo dos retornos. LGPD: dado de saúde é dado pessoal sensível — todo acesso passa por token JWT + RBAC, todo registro guarda autoria/data e os cargos sem autorização têm nível 1 (sem acesso) por padrão; recomenda-se criar um cargo "Enfermeira" no módulo Usuários com nível 3 apenas em Ferida.
+- Impacto: Nova categoria "Gestão Saúde" na sidebar com o módulo "Ferida". Novas coleções Firestore: `ferida_pacientes` e subcoleções `atendimentos`.
+- Como testar: Logar como ADM N1, abrir Gestão Saúde → Ferida, cadastrar um paciente de teste, marcar a ferida no mapa do corpo, preencher a ficha e salvar. Verificar se o histórico exibe o registro com autor e a tendência (melhora/estável/piora) a partir do segundo atendimento. Logar com cargo sem permissão e conferir o redirecionamento para o Meu Espaço.
+- Como reverter: Remover a pasta `/saude`, a rota `/src/rotas/ferida.js`, o registro em `/api/index.js` e as referências em `/core/permissions.js`, `/src/middlewares/auth.js` e `/usuarios/app.js`.
+
 ### [2026-05-27] Criação do módulo de Turmas e Categoria Docência
 - Autor: Antigravity
 - Branch: main

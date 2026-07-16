@@ -379,7 +379,8 @@ const MODULES = [
   { id: 'carga-horaria', name: 'Carga Horária',          icon: '⏰' },
   { id: 'empresas',      name: 'Parceiros',              icon: '🤝' },
   { id: 'turmas',        name: 'Turmas',                 icon: '🎓' },
-  { id: 'avaliacoes',    name: 'Avaliações',             icon: '📝' }
+  { id: 'avaliacoes',    name: 'Avaliações',             icon: '📝' },
+  { id: 'ferida',        name: 'Ferida',                 icon: '🩹' }
 ];
 
 function renderUsers(list) {
@@ -513,7 +514,8 @@ async function salvarNovoCargo(e) {
       'carga-horaria': 1,
       empresas: 1,
       turmas: 1,
-      avaliacoes: 1
+      avaliacoes: 1,
+      ferida: 1
     };
     await apiFetch('/usuarios/config/permissions', { method: 'PUT', body: JSON.stringify(perms) });
 
