@@ -210,11 +210,23 @@
   font-size: 14.5px;
   color: var(--tinta);
 }
-.pac-row { cursor: pointer; transition: background .12s; }
-.pac-row:hover { background: var(--silhueta); }
 .pac-lista-msg { text-align: center; color: var(--muted); padding: 24px 12px !important; }
+.pac-lista-acoes { display: flex; gap: 10px; white-space: nowrap; }
+.pac-lista-acoes a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  color: var(--petroleo);
+  transition: border-color .15s, color .15s;
+}
+.pac-lista-acoes a:hover { border-color: var(--turquesa); color: var(--turquesa-d); }
 @media (max-width: 700px) {
-  .pac-lista-tabela th:nth-child(3), .pac-lista-tabela td:nth-child(3) { display: none; }
+  .pac-lista-tabela th:nth-child(3), .pac-lista-tabela td:nth-child(3),
+  .pac-lista-tabela th:nth-child(4), .pac-lista-tabela td:nth-child(4) { display: none; }
 }
 
 /* Layout da ficha */
@@ -902,4 +914,163 @@ h2.title { font-size: 18px; color: var(--petroleo); margin-bottom: 4px; }
 @media (max-width: 900px) {
   .ferida-grid { grid-template-columns: 1fr; }
   .retorno { margin-left: 0; }
+}
+
+/* ==========================================
+   Relatório do paciente (relatorio.html)
+   ========================================== */
+.print-page {
+  background: #fff;
+  max-width: 210mm;
+  box-sizing: border-box;
+  margin: 0 auto 40px;
+  padding: 18mm 16mm;
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(27, 58, 75, .06);
+}
+.rel-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 2px solid var(--petroleo);
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+}
+.rel-logo { height: 48px; width: auto; }
+.rel-titulo { flex: 1; }
+.rel-titulo h1 { margin: 0; font-size: 17px; color: var(--petroleo); font-family: 'Plus Jakarta Sans', sans-serif; }
+.rel-titulo p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+.rel-data-emissao { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+
+.rel-paciente {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px 18px;
+  background: var(--silhueta);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 22px;
+}
+.rel-paciente div span { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; }
+.rel-paciente div b { font-size: 14px; color: var(--tinta); }
+
+.rel-secao {
+  font-size: 13px;
+  color: var(--turquesa-d);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  border-bottom: 1px solid var(--linha);
+  padding-bottom: 6px;
+  margin: 0 0 14px;
+}
+
+.rel-atendimento { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px dashed var(--linha); break-inside: avoid; page-break-inside: avoid; }
+.rel-atendimento:last-of-type { border-bottom: none; }
+.rel-atendimento-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.rel-atendimento-head b { font-size: 14px; color: var(--petroleo); }
+.rel-num { font-size: 11.5px; font-weight: 700; color: var(--turquesa-d); background: #e4f3f0; padding: 2px 9px; border-radius: 999px; }
+.rel-autor { font-size: 11.5px; color: var(--muted); margin-left: auto; }
+.rel-atendimento-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; font-size: 12.5px; color: #41525b; margin-bottom: 6px; }
+.rel-atendimento-grid b { color: var(--petroleo); }
+.rel-conduta { font-size: 12.5px; color: #41525b; }
+.rel-conduta b { color: var(--petroleo); }
+.rel-vazio { color: var(--muted); font-size: 13px; font-style: italic; }
+
+.rel-assinatura { margin-top: 40px; text-align: center; }
+.rel-assinatura .linha { border-top: 1px solid var(--tinta); width: 260px; margin: 0 auto; padding-top: 6px; font-size: 12.5px; color: var(--muted); }
+
+/* Relatório geral (relatorio-geral.html) */
+.rel-resumo { display: flex; gap: 14px; margin-bottom: 22px; }
+.rel-resumo-card {
+  flex: 1;
+  background: var(--silhueta);
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: center;
+}
+.rel-resumo-card b { display: block; font-size: 24px; color: var(--petroleo); font-family: 'Plus Jakarta Sans', sans-serif; }
+.rel-resumo-card span { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 700; }
+
+.rel-tabela { width: 100%; border-collapse: collapse; margin-bottom: 22px; break-inside: avoid; }
+.rel-tabela th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 0 10px 8px;
+  border-bottom: 1px solid var(--linha);
+}
+.rel-tabela td { padding: 7px 10px; font-size: 13px; color: var(--tinta); border-bottom: 1px solid var(--linha); }
+.rel-tabela-lista tr { break-inside: avoid; page-break-inside: avoid; }
+
+/* Painel "o que incluir" (relatorio-geral.html) — não imprime, só controla */
+.rel-opcoes-lista { display: flex; flex-wrap: wrap; gap: 10px 24px; }
+.rel-opcoes-lista label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--tinta);
+  cursor: pointer;
+}
+.rel-opcoes-lista input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--turquesa); cursor: pointer; }
+
+/* Seção desmarcada some do preview e da impressão */
+.rel-oculto { display: none !important; }
+
+@media (max-width: 700px) {
+  .rel-paciente { grid-template-columns: 1fr 1fr; }
+  .rel-atendimento-grid { grid-template-columns: 1fr; }
+}
+
+/* Telas de relatório (relatorio.html / relatorio-geral.html): o card do
+   relatório pode ficar bem alto, e o shell do app é flex com altura travada
+   (.layout-main overflow:hidden + .layout-content flex:1 overflow-y:auto) —
+   isso espremia o cabeçalho/opções numa caixinha de rolagem minúscula em vez
+   de deixar a página inteira rolar. Aqui a página inteira rola junto. */
+body.pagina-relatorio .layout-main {
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: block;
+}
+body.pagina-relatorio .layout-content {
+  flex: none;
+  overflow: visible;
+}
+
+@media print {
+  @page { size: A4; margin: 10mm; }
+  body.pagina-relatorio .no-print,
+  body.pagina-relatorio .layout-sidebar,
+  body.pagina-relatorio .layout-header { display: none !important; }
+  /* O shell do app (body/.layout-wrapper/.layout-main/.layout-content) trava a
+     altura em 100vh e corta o excedente (overflow hidden/auto) pra rolar na
+     tela — na impressão isso cortava o relatório fora da 1ª página. */
+  body.pagina-relatorio,
+  body.pagina-relatorio .layout-wrapper,
+  body.pagina-relatorio .layout-main,
+  body.pagina-relatorio .layout-content {
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  /* Margem própria no conteúdo (não só no @page): o diálogo de impressão do
+     navegador pode ignorar/zerar a margem do @page conforme a configuração
+     de quem imprime — sem isso, a informação encostava na borda física do
+     papel e saía cortada. */
+  body.pagina-relatorio .print-page {
+    max-width: none;
+    width: auto;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 8mm 10mm;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
 }

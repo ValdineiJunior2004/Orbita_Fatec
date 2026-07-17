@@ -16,6 +16,14 @@ let userLevel = 1;
 let appInitialized = false;
 let initializedRole = null;
 
+// O caminho rápido de auth (getCachedAuth) usa um token salvo em localStorage
+// que pode estar vencido — ele não se autorrenova como o objeto real do
+// Firebase. apiFetch espera a confirmação real (onAuthStateChanged) antes de
+// chamar a API, pra nunca usar um token velho e falhar em silêncio.
+let authConfirmado = false;
+let resolverAuthConfirmado;
+const authConfirmadoPromise = new Promise(res => { resolverAuthConfirmado = res; });
+
 // Estado da ficha
 let pacienteAtual = null;
 let atendimentos = [];
@@ -28,6 +36,7 @@ let iaImagens = { frente: null, verso: null };
 let iaDados = null;
 
 async function apiFetch(endpoint, options = {}) {
+  if (!authConfirmado) await authConfirmadoPromise;
   const token = await currentUser.getIdToken();
   const headers = {
     'Content-Type': 'application/json',
@@ -62,6 +71,8 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   currentUser = user;
+  authConfirmado = true;
+  resolverAuthConfirmado();
   try {
     const token = await user.getIdToken();
     let role = 'visitante';
@@ -126,13 +137,19 @@ async function initApp(user, role) {
 
   document.getElementById('app').classList.remove('hidden');
 
-  // pacientes.html reaproveita este app.js só pra auth/layout + busca de pacientes
+  // pacientes.html e as telas de relatório reaproveitam este app.js só pra auth/layout + a própria tela
   if (document.getElementById('tabela-pacientes')) {
     initPaginaPacientes();
     return;
   }
-
-  document.getElementById('meta-data').textContent = new Date().toLocaleDateString('pt-BR');
+  if (document.getElementById('relatorio-conteudo')) {
+    initPaginaRelatorio();
+    return;
+  }
+  if (document.getElementById('relatorio-geral-conteudo')) {
+    initPaginaRelatorioGeral();
+    return;
+  }
 
   setupBodyMap();
   setupChips();
@@ -164,20 +181,20 @@ function initPaginaPacientes() {
 
 async function buscarEExibirPacientes(termo) {
   const tbody = document.getElementById('tabela-pacientes');
-  tbody.innerHTML = `<tr><td colspan="4" class="pac-lista-msg">Buscando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="5" class="pac-lista-msg">Buscando...</td></tr>`;
   try {
     const qs = termo ? `?busca=${encodeURIComponent(termo)}` : '';
     const lista = await apiFetch(`/ferida/pacientes${qs}`);
     renderTabelaPacientes(lista);
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4" class="pac-lista-msg">Erro ao buscar: ${esc(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="pac-lista-msg">Erro ao buscar: ${esc(err.message)}</td></tr>`;
   }
 }
 
 function renderTabelaPacientes(lista) {
   const tbody = document.getElementById('tabela-pacientes');
   if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="4" class="pac-lista-msg">Nenhum paciente encontrado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="pac-lista-msg">Nenhum paciente encontrado.</td></tr>`;
     return;
   }
   tbody.innerHTML = lista.map(p => {
@@ -185,18 +202,229 @@ function renderTabelaPacientes(lista) {
     const nascimento = p.dataNascimento ? new Date(p.dataNascimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
     const cadastro = p.createdAt ? new Date(p.createdAt).toLocaleDateString('pt-BR') : '—';
     return `
-      <tr class="pac-row" data-id="${p.id}">
+      <tr>
         <td>${esc(p.nome)}</td>
+        <td>${esc(p.tipoFerida || '—')}</td>
         <td>${nascimento}${idade !== null ? ` (${idade} anos)` : ''}</td>
         <td>${esc(p.municipio || '—')}</td>
         <td>${cadastro}</td>
+        <td class="pac-lista-acoes">
+          <a href="index.html?paciente=${p.id}" title="Abrir ficha">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          </a>
+          <a href="relatorio.html?paciente=${p.id}" target="_blank" title="Gerar relatório">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+          </a>
+        </td>
       </tr>`;
   }).join('');
-  tbody.querySelectorAll('.pac-row').forEach(tr => {
-    tr.addEventListener('click', () => {
-      window.location.href = `index.html?paciente=${tr.dataset.id}`;
+}
+
+// ==========================================
+// TELA "RELATÓRIO" (relatorio.html) — documento imprimível
+// ==========================================
+
+async function initPaginaRelatorio() {
+  const id = new URLSearchParams(window.location.search).get('paciente');
+  const msg = document.getElementById('relatorio-msg');
+  const btnImprimir = document.getElementById('btn-imprimir-relatorio');
+  btnImprimir.disabled = true;
+
+  if (!id) {
+    msg.innerHTML = '<p class="hint" style="margin:0">Nenhum paciente selecionado. Volte pra tela "Pacientes" e use o botão de relatório numa linha.</p>';
+    return;
+  }
+
+  try {
+    const [paciente, atendimentosDoPaciente] = await Promise.all([
+      apiFetch(`/ferida/pacientes/${id}`),
+      apiFetch(`/ferida/pacientes/${id}/atendimentos`)
+    ]);
+    renderRelatorio(paciente, atendimentosDoPaciente);
+    msg.classList.add('hidden');
+    btnImprimir.disabled = false;
+    btnImprimir.addEventListener('click', () => window.print());
+  } catch (err) {
+    msg.innerHTML = `<p class="hint" style="margin:0">Erro ao carregar relatório: ${esc(err.message)}</p>`;
+  }
+}
+
+function renderRelatorio(p, atendimentosDoPaciente) {
+  const idade = calcIdade(p.dataNascimento);
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const listaOuTraco = arr => (Array.isArray(arr) && arr.length) ? esc(arr.join(', ')) : '—';
+
+  const blocos = atendimentosDoPaciente.map((at, i) => {
+    const quando = at.dataAtendimento ? fmtData(at.dataAtendimento) : new Date(at.createdAt).toLocaleDateString('pt-BR');
+    const dims = [
+      fmtDim(at.dimensoes?.comprimento)  && `Compr. ${fmtDim(at.dimensoes.comprimento)} cm`,
+      fmtDim(at.dimensoes?.largura)      && `Larg. ${fmtDim(at.dimensoes.largura)} cm`,
+      fmtDim(at.dimensoes?.profundidade) && `Prof. ${fmtDim(at.dimensoes.profundidade)} cm`,
+      fmtDim(at.dimensoes?.descolamento) && `Descol. ${fmtDim(at.dimensoes.descolamento)} cm`
+    ].filter(Boolean).join(' · ') || '—';
+    const locais = (at.marcacoes || []).map(m => m.rotulo).filter(Boolean);
+    const exs = at.exsudato || {};
+    const exsudatoTxt = [exs.tipo, exs.cor, exs.consistencia, exs.quantidade].filter(Boolean).join(' · ') || '—';
+    const biofilmeTxt = at.biofilme === true ? 'Sim' : at.biofilme === false ? 'Não' : '—';
+    const dorTxt = at.dor?.presente === true
+      ? `Sim${at.dor.escala ? ` (${at.dor.escala}/10)` : ''}`
+      : at.dor?.presente === false ? 'Não' : '—';
+    const rotulo = i === 0 ? '1º atendimento' : `${i + 1}º retorno`;
+
+    return `
+      <div class="rel-atendimento">
+        <div class="rel-atendimento-head">
+          <b>${esc(quando)}</b>
+          <span class="rel-num">${rotulo}</span>
+          <span class="rel-autor">por ${esc(at.createdByName || '—')}</span>
+        </div>
+        <div class="rel-atendimento-grid">
+          <div><b>Dimensões:</b> ${dims}</div>
+          <div><b>Localização:</b> ${listaOuTraco(locais)}</div>
+          <div><b>Tecido:</b> ${listaOuTraco(at.tecido)}</div>
+          <div><b>Bordas:</b> ${listaOuTraco(at.bordas)}</div>
+          <div><b>Pele adjacente:</b> ${listaOuTraco(at.peleAdjacente)}</div>
+          <div><b>Exsudato:</b> ${esc(exsudatoTxt)}</div>
+          <div><b>Infecção superficial:</b> ${listaOuTraco(at.infeccaoSuperficial)}</div>
+          <div><b>Infecção profunda:</b> ${listaOuTraco(at.infeccaoProfunda)}</div>
+          <div><b>Biofilme:</b> ${biofilmeTxt}</div>
+          <div><b>Dor:</b> ${dorTxt}</div>
+          <div><b>Cobertura(s):</b> ${listaOuTraco(at.cobertura)}</div>
+        </div>
+        <div class="rel-conduta"><b>Conduta:</b> ${esc(at.conduta || '—')}</div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('relatorio-conteudo').innerHTML = `
+    <div class="rel-cabecalho">
+      <img src="/img/fateclogoazul.png" alt="Fatec Ivaiporã" class="rel-logo">
+      <div class="rel-titulo">
+        <h1>Relatório de Avaliação e Evolução da Ferida</h1>
+        <p>Ambulatório · FATEC Ivaiporã</p>
+      </div>
+      <div class="rel-data-emissao">Emitido em ${hoje}</div>
+    </div>
+    <div class="rel-paciente">
+      <div><span>Paciente</span><b>${esc(p.nome)}</b></div>
+      <div><span>Idade</span><b>${idade !== null ? idade + ' anos' : '—'}</b></div>
+      <div><span>Município</span><b>${esc(p.municipio || '—')}</b></div>
+      <div><span>Tipo de ferida</span><b>${esc(p.tipoFerida || '—')}</b></div>
+    </div>
+    <h2 class="rel-secao">Evolução (${atendimentosDoPaciente.length} atendimento${atendimentosDoPaciente.length === 1 ? '' : 's'})</h2>
+    ${blocos || '<p class="rel-vazio">Nenhum atendimento registrado ainda.</p>'}
+    <div class="rel-assinatura">
+      <div class="linha">Enfermeira(o) responsável</div>
+    </div>
+  `;
+}
+
+// ==========================================
+// TELA "RELATÓRIO GERAL" (relatorio-geral.html)
+// ==========================================
+
+async function initPaginaRelatorioGeral() {
+  const msg = document.getElementById('relatorio-msg');
+  const opcoes = document.getElementById('relatorio-opcoes');
+  const btnImprimir = document.getElementById('btn-imprimir-relatorio');
+  btnImprimir.disabled = true;
+
+  try {
+    const pacientesTodos = await apiFetch('/ferida/pacientes');
+    renderRelatorioGeral(pacientesTodos);
+
+    if (!opcoes) throw new Error('Painel de opções não encontrado na página (#relatorio-opcoes) — provável versão antiga em cache. Dê Ctrl+Shift+R.');
+
+    opcoes.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const bloco = document.querySelector(`#relatorio-geral-conteudo [data-secao="${cb.dataset.secao}"]`);
+        if (bloco) bloco.classList.toggle('rel-oculto', !cb.checked);
+      });
     });
-  });
+
+    msg.classList.add('hidden');
+    opcoes.classList.remove('hidden');
+    btnImprimir.disabled = false;
+    btnImprimir.addEventListener('click', () => window.print());
+  } catch (err) {
+    console.error('Falha ao montar o relatório geral:', err);
+    msg.classList.remove('hidden');
+    msg.innerHTML = `<p class="hint" style="margin:0; color:#b3453c">Erro ao carregar relatório: ${esc(err.message)}</p>`;
+  }
+}
+
+function renderRelatorioGeral(pacientesTodos) {
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const total = pacientesTodos.length;
+
+  const contarPor = (chave, valorPadrao) => {
+    const contagem = {};
+    pacientesTodos.forEach(p => {
+      const v = (p[chave] && String(p[chave]).trim()) || valorPadrao;
+      contagem[v] = (contagem[v] || 0) + 1;
+    });
+    return Object.entries(contagem).sort((a, b) => b[1] - a[1]);
+  };
+
+  const linhasTabela = (pares) => pares.map(([nome, n]) => `
+    <tr><td>${esc(nome)}</td><td>${n}</td><td>${total ? Math.round(n / total * 100) : 0}%</td></tr>
+  `).join('');
+
+  const porTipo = contarPor('tipoFerida', 'Não especificado');
+  const porMunicipio = contarPor('municipio', 'Não informado');
+
+  const linhasPacientes = pacientesTodos
+    .slice()
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    .map(p => {
+      const cadastro = p.createdAt ? new Date(p.createdAt).toLocaleDateString('pt-BR') : '—';
+      return `
+        <tr>
+          <td>${esc(p.nome)}</td>
+          <td>${esc(p.tipoFerida || '—')}</td>
+          <td>${esc(p.municipio || '—')}</td>
+          <td>${cadastro}</td>
+        </tr>`;
+    }).join('');
+
+  document.getElementById('relatorio-geral-conteudo').innerHTML = `
+    <div class="rel-cabecalho">
+      <img src="/img/fateclogoazul.png" alt="Fatec Ivaiporã" class="rel-logo">
+      <div class="rel-titulo">
+        <h1>Relatório Geral de Pacientes</h1>
+        <p>Ambulatório · FATEC Ivaiporã</p>
+      </div>
+      <div class="rel-data-emissao">Emitido em ${hoje}</div>
+    </div>
+
+    <div data-secao="resumo" class="rel-resumo">
+      <div class="rel-resumo-card"><b>${total}</b><span>Paciente${total === 1 ? '' : 's'} cadastrado${total === 1 ? '' : 's'}</span></div>
+      <div class="rel-resumo-card"><b>${porMunicipio.length}</b><span>Município${porMunicipio.length === 1 ? '' : 's'} atendido${porMunicipio.length === 1 ? '' : 's'}</span></div>
+    </div>
+
+    <div data-secao="tipo">
+      <h2 class="rel-secao">Distribuição por tipo de ferida</h2>
+      <table class="rel-tabela">
+        <thead><tr><th>Tipo de ferida</th><th>Pacientes</th><th>%</th></tr></thead>
+        <tbody>${linhasTabela(porTipo)}</tbody>
+      </table>
+    </div>
+
+    <div data-secao="municipio">
+      <h2 class="rel-secao">Distribuição por município</h2>
+      <table class="rel-tabela">
+        <thead><tr><th>Município</th><th>Pacientes</th><th>%</th></tr></thead>
+        <tbody>${linhasTabela(porMunicipio)}</tbody>
+      </table>
+    </div>
+
+    <div data-secao="lista">
+      <h2 class="rel-secao">Lista de pacientes (${total})</h2>
+      <table class="rel-tabela rel-tabela-lista">
+        <thead><tr><th>Nome</th><th>Tipo de ferida</th><th>Município</th><th>Cadastrado em</th></tr></thead>
+        <tbody>${linhasPacientes || `<tr><td colspan="4" class="rel-vazio">Nenhum paciente cadastrado.</td></tr>`}</tbody>
+      </table>
+    </div>
+  `;
 }
 
 // ==========================================
@@ -285,6 +513,24 @@ async function abrirPacientePorId(id) {
   }
 }
 
+// Preenche um <select> de município preservando valores fora da lista fixa
+// do consórcio CIS de Ivaiporã (ex.: cadastro antigo ou leitura por OCR),
+// em vez de perder silenciosamente o dado.
+function selecionarMunicipio(selectId, valor) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  sel.querySelectorAll('option[data-extra]').forEach(o => o.remove());
+  const alvo = (valor || 'Ivaiporã').trim();
+  const existe = [...sel.options].some(o => o.textContent === alvo);
+  if (alvo && !existe) {
+    const opt = document.createElement('option');
+    opt.textContent = alvo;
+    opt.setAttribute('data-extra', '1');
+    sel.appendChild(opt);
+  }
+  sel.value = alvo;
+}
+
 function calcIdade(dataNascimento) {
   if (!dataNascimento) return null;
   const nasc = new Date(dataNascimento + 'T00:00:00');
@@ -307,6 +553,7 @@ async function selecionarPaciente(paciente) {
 
   if (!pacienteAtual) {
     document.getElementById('meta-municipio').textContent = '—';
+    document.getElementById('meta-tipo-ferida').textContent = '—';
     badge.classList.add('hidden');
     btnFichas.classList.add('hidden');
     btnHistorico.classList.add('hidden');
@@ -317,6 +564,9 @@ async function selecionarPaciente(paciente) {
   }
 
   document.getElementById('meta-municipio').textContent = pacienteAtual.municipio || '—';
+  document.getElementById('meta-tipo-ferida').textContent = pacienteAtual.tipoFerida || '—';
+  const linkRelatorio = document.getElementById('btn-relatorio-paciente');
+  if (linkRelatorio) linkRelatorio.href = `relatorio.html?paciente=${pacienteAtual.id}`;
 
   try {
     [atendimentos, fichasAntigas] = await Promise.all([
@@ -357,8 +607,8 @@ function setupPacienteModal() {
     const editando = !!paciente;
     document.getElementById('pac-id').value = editando ? paciente.id : '';
     document.getElementById('pac-nome').value = editando ? (paciente.nome || '') : '';
-    document.getElementById('pac-nascimento').value = editando ? (paciente.dataNascimento || '') : '';
-    document.getElementById('pac-municipio').value = editando ? (paciente.municipio || '') : 'Ivaiporã';
+    selecionarMunicipio('pac-municipio', editando ? paciente.municipio : 'Ivaiporã');
+    document.getElementById('pac-tipo-ferida').value = editando ? (paciente.tipoFerida || '') : '';
     document.getElementById('modal-paciente-title').textContent = editando ? 'Editar Paciente' : 'Novo Paciente';
     document.getElementById('btn-salvar-paciente').textContent = editando ? 'Salvar alterações' : 'Cadastrar';
     // No modo edição as fichas antigas são gerenciadas pela galeria própria
@@ -395,8 +645,8 @@ function setupPacienteModal() {
     const idEdicao = document.getElementById('pac-id').value;
     const dados = {
       nome: document.getElementById('pac-nome').value.trim(),
-      dataNascimento: document.getElementById('pac-nascimento').value || null,
-      municipio: document.getElementById('pac-municipio').value.trim()
+      municipio: document.getElementById('pac-municipio').value.trim(),
+      tipoFerida: document.getElementById('pac-tipo-ferida').value || null
     };
 
     btn.disabled = true;
@@ -453,14 +703,6 @@ async function excluirPaciente() {
   const resumo = `${atendimentos.length} atendimento(s) e ${fichasAntigas.length} ficha(s) antiga(s)`;
 
   if (!confirm(`Excluir DEFINITIVAMENTE o paciente "${p.nome}"?\n\nSerão apagados também ${resumo}. Essa ação NÃO tem volta.`)) return;
-
-  // Confirmação dupla: digitar o nome evita exclusão acidental de dado de saúde
-  const digitado = prompt(`Para confirmar, digite o nome do paciente exatamente como está no cadastro:\n\n${p.nome}`);
-  if (digitado === null) return;
-  if (digitado.trim().toLowerCase() !== p.nome.trim().toLowerCase()) {
-    showToast('Nome não confere — exclusão cancelada.', 'error');
-    return;
-  }
 
   try {
     await apiFetch(`/ferida/pacientes/${p.id}`, { method: 'DELETE' });
@@ -800,6 +1042,7 @@ async function salvarAtendimento() {
       presente: chipUnico('dorPresente') === null ? null : chipUnico('dorPresente') === 'Sim',
       escala: parseInt(chipUnico('dorEscala')) || null
     },
+    cobertura: chipsSelecionados('cobertura'),
     conduta: document.getElementById('conduta').value.trim(),
     dataAtendimento: dataAtendimentoImportada
   };
@@ -953,8 +1196,7 @@ function renderRevisaoIA(d) {
   const setDim = (id, v) => { document.getElementById(id).value = typeof v === 'number' ? String(v).replace('.', ',') : ''; };
 
   set('rev-nome', d.paciente?.nome);
-  set('rev-nascimento', d.paciente?.dataNascimento);
-  set('rev-municipio', d.paciente?.municipio || 'Ivaiporã');
+  selecionarMunicipio('rev-municipio', d.paciente?.municipio);
   set('rev-data', d.dataAtendimento);
   set('rev-localizacao', d.localizacao);
   setDim('rev-comprimento', d.dimensoes?.comprimento);
@@ -975,7 +1217,6 @@ async function aplicarFichaIA(e) {
   // Valores CORRIGIDOS pela pessoa na tela de conferência (não os crus da leitura)
   const val = (id) => document.getElementById(id).value.trim();
   const nome = val('rev-nome');
-  const nascimento = val('rev-nascimento') || null;
   const municipio = val('rev-municipio') || 'Ivaiporã';
   const dataFicha = val('rev-data') || null;
   const localizacao = val('rev-localizacao');
@@ -1001,9 +1242,9 @@ async function aplicarFichaIA(e) {
     if (!pacienteSelecionado) {
       const resp = await apiFetch('/ferida/pacientes', {
         method: 'POST',
-        body: JSON.stringify({ nome, dataNascimento: nascimento, municipio })
+        body: JSON.stringify({ nome, municipio })
       });
-      pacienteSelecionado = { id: resp.id, nome, dataNascimento: nascimento, municipio };
+      pacienteSelecionado = { id: resp.id, nome, municipio };
     }
     const pacienteId = pacienteSelecionado.id;
 
@@ -1190,6 +1431,7 @@ function abrirDetalheAtendimento(at) {
       ${linha('Infecção profunda', listaOuTraco(at.infeccaoProfunda))}
       ${linha('Biofilme', biofilmeTxt)}
       ${linha('Dor', dorTxt)}
+      ${linha('Cobertura(s) utilizada(s)', listaOuTraco(at.cobertura))}
     </div>
     <div class="det-conduta"><b>Conduta:</b><p>${esc(at.conduta || '—')}</p></div>
     <div class="det-autor">Registrado por ${esc(at.createdByName || '—')} em ${new Date(at.createdAt).toLocaleString('pt-BR')}</div>
