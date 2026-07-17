@@ -115,6 +115,113 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-07-17] Ferida: impressão do relatório encostava na borda física do papel
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/saude/ferida/ferida.css` (`.print-page` ganhou padding próprio (8mm/10mm) dentro do `@media print`, em vez de depender só da margem do `@page` — o diálogo de impressão do navegador pode ignorar/zerar essa margem conforme a configuração de quem imprime, e sem uma margem garantida no próprio conteúdo, a informação das colunas da direita (data de emissão, autor, campos do grid de 2 colunas) encostava e cortava na borda do papel, como mostrado no print enviado pelo usuário. Também reduzido o `@page margin` de 12mm pra 10mm pra não dobrar demais a margem total, e adicionado `box-sizing: border-box` no `.print-page` — tanto na versão de tela quanto na de impressão — pra padding não somar por cima do `max-width`)
+- Tipo: Correção de Bug
+- Motivo: Usuário mandou print mostrando texto cortado na borda direita do relatório impresso.
+- Impacto: Nenhuma mudança de schema/endpoint. Efeito só visual na impressão/PDF dos relatórios.
+- Como testar: Imprimir/salvar PDF do relatório individual e do geral e conferir que nenhuma informação (datas, nomes, colunas da direita) encosta ou corta na borda do papel.
+- Como reverter: Devolver `.print-page` no `@media print` pra `padding: 0` e o `@page margin` pra 12mm.
+
+### [2026-07-17] Ferida: corrige o painel de opções "escondido" nas telas de relatório
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/saude/ferida/ferida.css` (Achada a causa real do painel "O que incluir" não aparecer: o shell do app é flexbox com altura travada — `.layout-main` tem `overflow:hidden` e `.layout-content` é `flex:1; overflow-y:auto`. Como o card do relatório (`.print-page`) é alto e fica *fora* de `.layout-content`, como irmão dela dentro de `.layout-main`, o flexbox espremia `.layout-content` — com o cabeçalho, botões e o painel de opções dentro — numa caixinha de rolagem minúscula, exigindo rolar *dentro* dela pra ver o painel. Agora, só nas telas de relatório (`body.pagina-relatorio`), `.layout-main` rola a página inteira e `.layout-content` para de competir por espaço com o card do relatório)
+- Tipo: Correção de Bug
+- Motivo: Usuário reportou que o painel de checkboxes não aparecia; com um print da tela e testando em aba anônima (descartando cache/extensão), ele mesmo percebeu que a área existia mas estava dentro de uma divisão com barra de rolagem própria, cortada da vista.
+- Impacto: Nenhuma mudança de schema/endpoint. Só afeta a rolagem visual das telas de relatório — `body.pagina-relatorio` não se aplica a `index.html`/`pacientes.html`.
+- Como testar: Abrir o Relatório Geral e conferir que o painel "Escolha o que vai sair no relatório" aparece normalmente entre o cabeçalho e o card do relatório, sem precisar rolar dentro de uma caixinha separada; a página deve rolar inteira, de um jeito só.
+- Como reverter: Remover o bloco `body.pagina-relatorio .layout-main`/`.layout-content` (fora do `@media print`) em `ferida.css`.
+
+### [2026-07-17] Ferida: corrige possível falha silenciosa no relatório geral (token de sessão)
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/saude/ferida/app.js`:
+    - `apiFetch` agora espera a confirmação real do Firebase (`onAuthStateChanged`) antes da primeira chamada à API — o caminho rápido de auth (`getCachedAuth`) usa um token salvo em `localStorage` que não se autorrenova (diferente do objeto real do Firebase), então uma sessão parada há mais de 1h podia fazer a primeira chamada da tela falhar com 401 sem aviso nenhum, se o teste começou logo depois de o relatório carregar dados a partir do cache.
+    - `initPaginaRelatorioGeral`: se o painel de opções não existir na página (`#relatorio-opcoes`), agora lança um erro explícito em vez de travar silenciosamente; erros nessa função voltaram a aparecer visíveis em `#relatorio-msg` (antes podiam ficar escondidos atrás da classe `hidden` já aplicada).
+- Tipo: Correção de Bug
+- Motivo: Usuário reportou que o painel "O que incluir" não aparecia no Relatório Geral, sem erro nenhum visível, mesmo após recarregar a página — sintoma clássico de uma chamada à API falhando em silêncio por token vencido.
+- Impacto: Nenhuma mudança de schema/endpoint. Todas as chamadas de API do módulo Ferida (ficha, pacientes, relatórios) ganham essa proteção, não só o relatório geral.
+- Como testar: Deixar a sessão aberta por mais de 1h sem uso e depois abrir o Relatório Geral direto — deve carregar normalmente (ou, se falhar por outro motivo, mostrar um erro visível em vez de nada). Em uso normal, testar o painel "O que incluir" como antes.
+- Como reverter: Remover `authConfirmado`/`authConfirmadoPromise` e o `await` correspondente no início de `apiFetch`.
+
+### [2026-07-17] Ferida: relatório geral com seções opcionais
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/saude/ferida/relatorio-geral.html` (Novo painel "O que incluir", com uma checkbox por seção — Resumo, Distribuição por tipo de ferida, Distribuição por município, Lista de pacientes — todas marcadas por padrão)
+  - `/saude/ferida/app.js` (Cada seção do relatório geral agora nasce marcada com `data-secao`; desmarcar uma checkbox aplica a classe `.rel-oculto`, escondendo a seção tanto na prévia quanto na impressão)
+  - `/saude/ferida/ferida.css` (Estilo da lista de checkboxes e a classe `.rel-oculto`)
+- Tipo: Evolução de Funcionalidade
+- Motivo: Pedido do usuário — o relatório geral saía sempre completo; a pessoa que emite precisa poder escolher o que vai no documento final, não tudo de uma vez.
+- Impacto: Nenhuma mudança de schema/endpoint. Por padrão, com tudo marcado, o relatório sai igual a antes.
+- Como testar: Abrir o relatório geral, desmarcar por exemplo "Lista de pacientes" e conferir que ela some da prévia e da impressão, mantendo as demais seções.
+- Como reverter: Remover o painel `#relatorio-opcoes` do HTML, os atributos `data-secao` e o listener de checkboxes no `app.js`, e a classe `.rel-oculto` no CSS.
+
+### [2026-07-17] Ferida: relatório geral, correção da impressão e exclusão simplificada
+- Autor: Claude Code
+- Branch: main
+- Arquivos criados:
+  - `/saude/ferida/relatorio-geral.html` (Nova tela: relatório imprimível com todos os pacientes — total cadastrado, distribuição por tipo de ferida e por município (contagem + %), e a lista completa (nome, tipo de ferida, município, cadastro). Mesma identidade visual/logo do relatório por paciente. Acessível pelo botão "Relatório geral" na tela "Pacientes")
+- Arquivos alterados:
+  - `/saude/ferida/ferida.css`:
+    - **Correção de impressão:** o shell do app (`body`, `.layout-wrapper`, `.layout-main`, `.layout-content`, em `core/layout.css`) trava a altura em `100vh` e esconde o excedente pra rolar na tela — isso cortava o relatório fora da primeira página ao imprimir. O `@media print` agora reseta `height`/`overflow`/`margin`/`padding` dessa cadeia inteira (escopado por `body.pagina-relatorio`, sem afetar impressão de outras telas do módulo).
+    - Estilos novos do relatório geral (`.rel-resumo`, `.rel-resumo-card`, `.rel-tabela`).
+  - `/saude/ferida/app.js`: `excluirPaciente()` não pede mais pra digitar o nome do paciente — só um `confirm()` único com o resumo do que será apagado. Novas funções `initPaginaRelatorioGeral`/`renderRelatorioGeral` (reaproveitam `initApp`, detectando `#relatorio-geral-conteudo`).
+  - `/saude/ferida/pacientes.html`: novo botão "Relatório geral" no cabeçalho, ao lado de "Voltar para a ficha".
+- Tipo: Nova Funcionalidade / Correção de Bug / Simplificação de UX
+- Motivo: Pedido do usuário — faltava uma visão agregada de todos os pacientes pra tirar num relatório só; a impressão do relatório por paciente estava cortando informação nas bordas; e a confirmação dupla (digitar o nome) na exclusão de paciente foi considerada excessiva — um aviso único já basta.
+- Impacto: Nenhuma mudança de schema ou endpoint novo — o relatório geral só lê `GET /pacientes` (a mesma rota que a tela "Pacientes" já usa, sem `busca`). Excluir paciente continua irreversível, só que agora com um clique de confirmação em vez de dois.
+- Como testar: Na tela "Pacientes", clicar em "Relatório geral" e conferir os totais/distribuições e a lista; imprimir (Ctrl+P) tanto o relatório geral quanto o de um paciente com vários atendimentos e confirmar que nada fica cortado nas bordas, mesmo em relatórios longos com mais de uma página; excluir um paciente de teste e confirmar que só aparece um aviso (sem pedir pra digitar o nome).
+- Como reverter: Remover `/saude/ferida/relatorio-geral.html` e o botão em `pacientes.html`; devolver o `prompt()` de confirmação em `excluirPaciente()`; reverter o bloco de reset de altura/overflow do `@media print` em `ferida.css` (mantendo só o que já existia antes).
+
+### [2026-07-17] Ferida: tipo de ferida vai pro cadastro do paciente + tela de relatório imprimível
+- Autor: Claude Code
+- Branch: main
+- Arquivos criados:
+  - `/saude/ferida/relatorio.html` (Nova tela: relatório de avaliação e evolução do paciente, pronto pra imprimir/salvar como PDF pelo navegador — `?paciente=ID`. Cabeçalho com a logo da Fatec (reaproveita `/img/fateclogoazul.png`, já usada no módulo Fidelidade — não foi preciso subir arquivo novo), identificação do paciente (nome, idade, município, tipo de ferida) e a evolução completa: um bloco por atendimento com todos os campos clínicos e a conduta, nas cores do módulo (petróleo/turquesa). Usa o mesmo padrão `.print-page` + `@media print` já usado em `avaliacoes.css`, escopado por `body.pagina-relatorio` pra não afetar a impressão das outras telas do módulo, que compartilham o mesmo `ferida.css`)
+- Arquivos alterados:
+  - `/saude/ferida/index.html`:
+    - "Tipo de ferida" deixou de ser campo do atendimento e virou select no cadastro/edição do paciente (Neuropatia Diabética, Úlcera Venosa, Úlcera Arterial, Úlcera Mista, com opção "Não especificado"); passou a aparecer na barra do paciente, junto do município.
+    - Novo botão "Relatório" na barra do paciente, ao lado de Editar/Excluir — disponível pra leitura e escrita (não é `action-execute`, já que gerar relatório não é uma ação de escrita) — abre `relatorio.html?paciente=ID` em nova aba.
+  - `/saude/ferida/pacientes.html`: nova coluna "Tipo de ferida" na tabela; a linha deixou de ser clicável por inteiro — agora tem uma coluna "Ações" com dois ícones por paciente (abrir ficha / gerar relatório).
+  - `/saude/ferida/app.js`: `tipoFerida` saiu do payload do atendimento e do modal de detalhe do histórico, entrou no modal de paciente e em `selecionarPaciente`/`renderTabelaPacientes`; novas funções `initPaginaRelatorio` e `renderRelatorio` (reaproveitam `initApp` como as outras telas, detectando `#relatorio-conteudo`).
+  - `/saude/ferida/ferida.css`: estilos do relatório (`.rel-*`), regras de impressão (`@media print`, escopadas por `body.pagina-relatorio`) e da nova coluna de ações em `pacientes.html`.
+  - `/src/rotas/ferida.js`: `tipoFerida` saiu da validação/gravação de `POST /pacientes/:id/atendimentos` e entrou em `POST /pacientes` e `PUT /pacientes/:id` (contra a mesma lista fechada de 4 tipos).
+- Tipo: Nova Funcionalidade / Correção de Modelagem
+- Motivo: Pedido do usuário — tipo de ferida é uma característica do paciente/diagnóstico, não algo que se redefine a cada atendimento, então devia estar no cadastro; e faltava uma forma de gerar um relatório imprimível e com a identidade visual da Fatec pra levar pra fora do sistema (referência, prontuário físico, etc.).
+- Impacto: Atendimentos não têm mais `tipoFerida` (quem já tinha ficou órfão do campo — não é lido em lugar nenhum, sem efeito). Pacientes ganham `tipoFerida` (string de uma lista fechada, ou null). Nenhum endpoint novo — o relatório só lê `GET /pacientes/:id` e `GET /pacientes/:id/atendimentos`, que já existiam.
+- Como testar: Cadastrar/editar um paciente escolhendo o tipo de ferida e ver aparecer na barra e na tabela de "Pacientes"; clicar em "Relatório" (na ficha ou na lista) e conferir a logo, os dados do paciente e a evolução completa; usar Ctrl+P / "Imprimir / Salvar PDF" e confirmar que só o relatório aparece (sem menu/sidebar) e que as outras telas do módulo continuam imprimindo normalmente.
+- Como reverter: Remover `/saude/ferida/relatorio.html`, o botão/coluna de ações relacionados, `tipoFerida` de `POST/PUT /pacientes` e devolver o campo ao formulário de atendimento (se necessário).
+
+### [2026-07-17] Ferida: remove nascimento e data redundante, adiciona tipo de ferida, cobertura e município por lista
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/saude/ferida/index.html`:
+    - Removido "Data" da barra do paciente (`#meta-data`) — já é capturada automaticamente em cada atendimento (`createdAt`), era redundante.
+    - Removido o campo "Data de nascimento" do cadastro/edição de paciente (`#pac-nascimento`) e da revisão do OCR (`#rev-nascimento`).
+    - Novo campo "Tipo de ferida" (Neuropatia Diabética, Úlcera Venosa, Úlcera Arterial, Úlcera Mista), single-select, no topo dos campos clínicos.
+    - Novo campo "Cobertura(s) utilizada(s)" (ALEVYN, AQUACEL AG+, AQUASEPT, BACTIGRASS, BOTA DE UNNA, CREME BARREIRA, GAZE KERLIX, HIDROCOLOIDE, PIELSANA, SOLOSITE — em ordem alfabética pt-BR), multi-select, imediatamente antes do relatório final (conduta).
+    - `#pac-municipio` e `#rev-municipio` deixaram de ser texto livre e viraram `<select>` com os 16 municípios do consórcio CIS de Ivaiporã (lista fixa, a pedido do usuário — sem tela de gerenciamento por ora).
+  - `/saude/ferida/app.js`:
+    - Removidas as leituras/escritas de `pac-nascimento`/`rev-nascimento` (modal de paciente, revisão do OCR, `aplicarFichaIA`).
+    - Nova função `selecionarMunicipio(selectId, valor)`: preenche o select preservando qualquer município fora da lista fixa (cadastro antigo ou lido por OCR) — injeta uma opção extra em vez de perder o dado.
+    - `salvarAtendimento` envia `tipoFerida` e `cobertura`; `abrirDetalheAtendimento` exibe os dois no modal de detalhe do histórico.
+  - `/src/rotas/ferida.js`:
+    - `PUT /pacientes/:id` só grava `dataNascimento` se o campo vier explícito no corpo da requisição — evita apagar o nascimento de pacientes antigos agora que o formulário não o envia mais.
+    - `POST /pacientes/:id/atendimentos` valida e grava `tipoFerida` (contra lista fechada) e `cobertura` (array).
+- Tipo: Evolução de Funcionalidade / Simplificação
+- Motivo: Propostas de melhoria do usuário — a data da barra era redundante com a autoria de cada atendimento; nascimento não é mais coletado no cadastro; tipo de ferida e cobertura eram informações da rotina clínica que faltavam no digital; município por lista evita erro de digitação e ganha consistência (facilita quem cadastra).
+- Impacto: Atendimentos novos ganham `tipoFerida` (string ou null) e `cobertura` (array); registros antigos não têm esses campos (leitura tolera ausência). Pacientes novos não recebem `dataNascimento`; pacientes antigos mantêm o valor que já tinham (não é apagado ao editar). Município deixa de ser texto livre, mas qualquer valor antigo fora da lista continua visível/editável graças à opção extra injetada.
+- Como testar: Abrir a ficha — não deve mais aparecer "Data" na barra do paciente nem "Data de nascimento" no cadastro; selecionar Tipo de ferida e Cobertura(s), salvar um atendimento e conferir os dois no detalhe do histórico; cadastrar paciente novo escolhendo o município por lista; editar um paciente antigo que já tinha nascimento e confirmar que o valor não desaparece do banco após salvar (mesmo sem campo na tela).
+- Como reverter: Restaurar os campos `pac-nascimento`/`rev-nascimento`/`meta-data` removidos, os `<input type="text">` de município, e remover `tipoFerida`/`cobertura` dos três arquivos.
+
 ### [2026-07-16] Ferida: orientações de biofilme (sinais clínicos e indicadores) da ficha de papel
 - Autor: Claude Code
 - Branch: main

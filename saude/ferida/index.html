@@ -66,10 +66,14 @@
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                             Excluir
                         </button>
+                        <a class="pac-act" id="btn-relatorio-paciente" href="#" target="_blank" title="Gerar relatório de avaliação e evolução deste paciente" style="text-decoration:none;">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+                            Relatório
+                        </a>
                     </div>
                     <div class="pmeta">
                         <div>Município: <b id="meta-municipio">—</b></div>
-                        <div>Data: <b id="meta-data">—</b></div>
+                        <div>Tipo de ferida: <b id="meta-tipo-ferida">—</b></div>
                     </div>
                     <span class="retorno hidden" id="badge-retorno">—</span>
                     <button type="button" class="btn-fichas hidden" id="btn-historico">
@@ -287,6 +291,22 @@
 
                         <section class="panel">
                             <div class="fieldset">
+                                <div class="flabel"><span class="n"></span>Cobertura(s) utilizada(s)</div>
+                                <div class="chips" data-multi data-field="cobertura">
+                                    <span class="chip" tabindex="0">ALEVYN</span>
+                                    <span class="chip" tabindex="0">AQUACEL AG+</span>
+                                    <span class="chip" tabindex="0">AQUASEPT</span>
+                                    <span class="chip" tabindex="0">BACTIGRASS</span>
+                                    <span class="chip" tabindex="0">BOTA DE UNNA</span>
+                                    <span class="chip" tabindex="0">CREME BARREIRA</span>
+                                    <span class="chip" tabindex="0">GAZE KERLIX</span>
+                                    <span class="chip" tabindex="0">HIDROCOLOIDE</span>
+                                    <span class="chip" tabindex="0">PIELSANA</span>
+                                    <span class="chip" tabindex="0">SOLOSITE</span>
+                                </div>
+                            </div>
+
+                            <div class="fieldset">
                                 <div class="flabel"><span class="n"></span>Procedimento, cobertura e conduta</div>
                                 <textarea id="conduta" placeholder="Descreva como a ferida estava hoje, o procedimento e a cobertura realizados, e o que se espera para o próximo retorno."></textarea>
                             </div>
@@ -317,15 +337,36 @@
                     <label>Nome completo *</label>
                     <input type="text" id="pac-nome" placeholder="Ex: Maria da Silva" required>
                 </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
-                    <div class="form-group">
-                        <label>Data de nascimento</label>
-                        <input type="date" id="pac-nascimento">
-                    </div>
-                    <div class="form-group">
-                        <label>Município</label>
-                        <input type="text" id="pac-municipio" value="Ivaiporã">
-                    </div>
+                <div class="form-group">
+                    <label>Município</label>
+                    <select id="pac-municipio">
+                        <option>Arapuã</option>
+                        <option>Ariranha do Ivaí</option>
+                        <option>Cândido de Abreu</option>
+                        <option>Cruzmaltina</option>
+                        <option>Godoy Moreira</option>
+                        <option selected>Ivaiporã</option>
+                        <option>Jardim Alegre</option>
+                        <option>Lidianópolis</option>
+                        <option>Lunardelli</option>
+                        <option>Manoel Ribas</option>
+                        <option>Mato Rico</option>
+                        <option>Nova Tebas</option>
+                        <option>Rio Branco do Ivaí</option>
+                        <option>Rosário do Ivaí</option>
+                        <option>Santa Maria do Oeste</option>
+                        <option>São João do Ivaí</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tipo de ferida</label>
+                    <select id="pac-tipo-ferida">
+                        <option value="">Não especificado</option>
+                        <option>Neuropatia Diabética</option>
+                        <option>Úlcera Venosa</option>
+                        <option>Úlcera Arterial</option>
+                        <option>Úlcera Mista</option>
+                    </select>
                 </div>
                 <div class="form-group" id="grupo-fichas-novo">
                     <label>Fichas antigas de papel (fotos ou digitalizações)</label>
@@ -453,15 +494,26 @@
                             <label>Nome do paciente *</label>
                             <input type="text" id="rev-nome" placeholder="Não identificado — digite o nome">
                         </div>
-                        <div class="rev-grid2">
-                            <div class="form-group">
-                                <label>Data de nascimento</label>
-                                <input type="date" id="rev-nascimento">
-                            </div>
-                            <div class="form-group">
-                                <label>Município</label>
-                                <input type="text" id="rev-municipio">
-                            </div>
+                        <div class="form-group">
+                            <label>Município</label>
+                            <select id="rev-municipio">
+                                <option>Arapuã</option>
+                                <option>Ariranha do Ivaí</option>
+                                <option>Cândido de Abreu</option>
+                                <option>Cruzmaltina</option>
+                                <option>Godoy Moreira</option>
+                                <option selected>Ivaiporã</option>
+                                <option>Jardim Alegre</option>
+                                <option>Lidianópolis</option>
+                                <option>Lunardelli</option>
+                                <option>Manoel Ribas</option>
+                                <option>Mato Rico</option>
+                                <option>Nova Tebas</option>
+                                <option>Rio Branco do Ivaí</option>
+                                <option>Rosário do Ivaí</option>
+                                <option>Santa Maria do Oeste</option>
+                                <option>São João do Ivaí</option>
+                            </select>
                         </div>
                         <div class="rev-grid2">
                             <div class="form-group">

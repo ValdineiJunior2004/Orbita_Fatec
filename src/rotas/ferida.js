@@ -9,6 +9,7 @@ const verifyToken = require('../middlewares/auth');
 const checkPermission = verifyToken.requireModulePermission('ferida');
 
 const COL_PACIENTES = 'ferida_pacientes';
+const TIPOS_FERIDA = ['Neuropatia Diabética', 'Úlcera Venosa', 'Úlcera Arterial', 'Úlcera Mista'];
 
 // ==========================================
 // PACIENTES
@@ -62,7 +63,7 @@ router.get('/pacientes/:id', verifyToken, checkPermission, async (req, res) => {
 // POST /api/ferida/pacientes - Cadastrar novo paciente
 router.post('/pacientes', verifyToken, checkPermission, async (req, res) => {
     try {
-        const { nome, dataNascimento, municipio } = req.body;
+        const { nome, dataNascimento, municipio, tipoFerida } = req.body;
 
         if (!nome || !nome.trim()) {
             return res.status(400).json({ error: 'O nome do paciente é obrigatório.' });
@@ -73,6 +74,7 @@ router.post('/pacientes', verifyToken, checkPermission, async (req, res) => {
             nome: nome.trim(),
             dataNascimento: dataNascimento || null,
             municipio: (municipio || '').trim(),
+            tipoFerida: TIPOS_FERIDA.includes(tipoFerida) ? tipoFerida : null,
             createdAt: new Date().toISOString(),
             createdBy: req.user.uid,
             createdByName: req.user.name || req.user.email || ''
@@ -86,19 +88,24 @@ router.post('/pacientes', verifyToken, checkPermission, async (req, res) => {
 // PUT /api/ferida/pacientes/:id - Atualizar dados cadastrais do paciente
 router.put('/pacientes/:id', verifyToken, checkPermission, async (req, res) => {
     try {
-        const { nome, dataNascimento, municipio } = req.body;
+        const { nome, dataNascimento, municipio, tipoFerida } = req.body;
 
         if (!nome || !nome.trim()) {
             return res.status(400).json({ error: 'O nome do paciente é obrigatório.' });
         }
 
-        await db.collection(COL_PACIENTES).doc(req.params.id).update({
+        const dadosAtualizados = {
             nome: nome.trim(),
-            dataNascimento: dataNascimento || null,
             municipio: (municipio || '').trim(),
+            tipoFerida: TIPOS_FERIDA.includes(tipoFerida) ? tipoFerida : null,
             updatedAt: new Date().toISOString(),
             updatedBy: req.user.uid
-        });
+        };
+        // O cadastro não pede mais nascimento — só toca o campo se vier explícito
+        // no corpo da requisição, pra não apagar o dado de pacientes antigos.
+        if (dataNascimento !== undefined) dadosAtualizados.dataNascimento = dataNascimento || null;
+
+        await db.collection(COL_PACIENTES).doc(req.params.id).update(dadosAtualizados);
         res.json({ message: 'Paciente atualizado com sucesso!' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -174,6 +181,7 @@ router.post('/pacientes/:id/atendimentos', verifyToken, checkPermission, async (
             infeccaoProfunda,     // ["Edema", ...]
             biofilme,             // true | false | null
             dor,                  // { presente: true|false|null, escala: 1..10|null }
+            cobertura,            // ["SOLOSITE", "AQUACEL AG+", ...]
             conduta,              // texto livre
             dataAtendimento       // YYYY-MM-DD opcional: data original (ficha de papel importada)
         } = req.body;
@@ -189,6 +197,7 @@ router.post('/pacientes/:id/atendimentos', verifyToken, checkPermission, async (
             (Array.isArray(infeccaoProfunda) && infeccaoProfunda.length) ||
             biofilme !== null && biofilme !== undefined ||
             (dor && (typeof dor.presente === 'boolean' || dor.escala)) ||
+            (Array.isArray(cobertura) && cobertura.length) ||
             (conduta && conduta.trim());
 
         if (!temConteudo) {
@@ -232,6 +241,7 @@ router.post('/pacientes/:id/atendimentos', verifyToken, checkPermission, async (
                 presente: typeof dor?.presente === 'boolean' ? dor.presente : null,
                 escala: (Number.isInteger(dor?.escala) && dor.escala >= 1 && dor.escala <= 10) ? dor.escala : null
             },
+            cobertura:           Array.isArray(cobertura) ? cobertura : [],
             conduta:             (conduta || '').trim(),
             dataAtendimento:     (typeof dataAtendimento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dataAtendimento)) ? dataAtendimento : null,
             // Autoria obrigatória (LGPD): quem registrou, quando
