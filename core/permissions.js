@@ -3,7 +3,8 @@ export const CATEGORIES = {
   rh: "Recursos Humanos",
   admin: "Administrativo",
   docencia: "Docência",
-  saude: "Gestão Saúde"
+  saude: "Gestão Saúde",
+  secretaria: "Secretaria"
 };
 
 export const MODULES = {
@@ -102,17 +103,24 @@ export const MODULES = {
     title: "Almoxarifado Saúde",
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3a2 2 0 0 1-2-2V2"/><path d="M9 22V12h6v10"/><path d="M14 2H8a2 2 0 0 0-2 2v6l-3 3v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7l-3-3V4a2 2 0 0 0-2-2z"/></svg>`,
     url: "/saude/almoxarifado-saude/index.html"
+  },
+  "relatorio-dp": {
+    id: "relatorio-dp",
+    category: "secretaria",
+    title: "Relatório DP",
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>`,
+    url: "/secretaria/relatorio-dp/index.html"
   }
 };
 
 export const ROLE_PERMISSIONS = {
   adm_l1: {
     label: "ADM N1",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes", "ferida", "almoxarifado-feridas", "almoxarifado-saude"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp"]
   },
   adm_l2: {
     label: "ADM N2",
-    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes", "ferida", "almoxarifado-feridas", "almoxarifado-saude"]
+    modules: ["dashboard", "fidelidade", "emprestimo", "agenda", "usuarios", "ensalamento", "carga-horaria", "funcionarios", "empresas", "turmas", "avaliacoes", "ferida", "almoxarifado-feridas", "almoxarifado-saude", "relatorio-dp"]
   },
   ti: {
     label: "T.I.",
