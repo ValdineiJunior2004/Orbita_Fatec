@@ -115,6 +115,54 @@ Sempre que um arquivo for criado, alterado ou removido, registrar aqui seguindo 
 
 ## 8. Histórico de alterações
 
+### [2026-07-22] Almoxarifado Saúde: relatórios de estoque e movimentações
+- Autor: Claude Code
+- Branch: main
+- Arquivos criados:
+  - `/saude/almoxarifado-saude/relatorio-estoque.html` (Snapshot completo de uma categoria — Consumível ou Permanente, via `?categoria=` — agrupado por localização/sala, igual ao levantamento físico original. Mesmo padrão visual/`.print-page` do Almoxarifado Feridas)
+  - `/saude/almoxarifado-saude/relatorio-movimentacoes.html` (Extrato de entradas/saídas de Consumíveis num período escolhido, com totais e saldo — nada é buscado até clicar em "Gerar")
+- Arquivos alterados:
+  - `/src/rotas/almoxarifado-saude.js` (Novo endpoint `GET /relatorio-estoque?categoria=` — ao contrário de `GET /itens` (paginado), aqui traz a categoria inteira de propósito, já que gerar relatório é uma ação explícita e ocasional, não algo disparado a cada abertura de tela)
+  - `/saude/almoxarifado-saude/app.js` (Detecção das páginas de relatório reaproveitando o mesmo `app.js`, igual ao Almoxarifado Feridas; o botão "Relatório de estoque" no cabeçalho troca de link conforme a aba ativa)
+  - `/saude/almoxarifado-saude/almoxarifado-saude.css` (Estilos `.print-page`/`.rel-*` e regras de impressão, copiados do Almoxarifado Feridas)
+- Tipo: Nova Funcionalidade
+- Motivo: Pedido do usuário — replicar os relatórios que já existem no Almoxarifado Feridas.
+- Impacto: Nenhuma mudança de schema/endpoint existente.
+- Como testar: Em cada aba, clicar em "Relatório de estoque" e conferir que abre já filtrado pra categoria certa, agrupado por sala; na aba Consumíveis, clicar em "Relatório de movimentações", escolher um período e gerar; testar impressão/PDF dos dois.
+- Como reverter: Remover os 2 arquivos `.html`, o endpoint `/relatorio-estoque` em `almoxarifado-saude.js`, as funções de relatório e a checagem de página em `app.js`, e o bloco `.print-page`/`.rel-*`/`@media print` do CSS.
+
+### [2026-07-22] Almoxarifado Saúde: paginação pra reduzir leituras do Firestore
+- Autor: Claude Code
+- Branch: main
+- Arquivos alterados:
+  - `/src/rotas/almoxarifado-saude.js` (`GET /itens` deixou de trazer a categoria inteira — 575 Consumíveis ou 945 Permanente — de uma vez, e virou paginado: `?categoria=&localizacao=&busca=&limit=&cursor=`, respondendo `{itens, hasMore, proximoCursor}`. Busca por nome e filtro por localização agora rodam no servidor, via consulta paginada, em vez de carregar tudo pro navegador filtrar. Novo endpoint `GET /itens/alertas?categoria=&tipo=baixo|vencimento` cobre os filtros "só estoque baixo" e "só vencendo/vencido" — como poucos itens têm estoqueMinimo ou validade definidos, essas consultas já saem pequenas por natureza, sem precisar paginar)
+  - `/saude/almoxarifado-saude/app.js` (Troca do carregamento único + filtro client-side por paginação real: busca com debounce dispara nova 1ª página no servidor; botão "Carregar mais" busca a próxima página pelo cursor; os checkboxes de estoque baixo/vencimento chaveiam pro endpoint de alertas dedicado)
+  - `/saude/almoxarifado-saude/almoxarifado-saude.css` (Estilo do botão "Carregar mais")
+  - `/firestore.indexes.json` (3 índices compostos novos, já publicados: `almoxarifado_itens` por categoria+localizacao+nome e por categoria+estoqueMinimo; `almoxarifado_lotes` por itemId+validade)
+- Tipo: Correção de Performance/Custo
+- Motivo: Usuário reportou consumo alto do banco — a tela original buscava a categoria inteira (centenas de itens) a cada abertura de página e a cada troca de aba, gastando 500-950 leituras do Firestore por carregamento.
+- Impacto: Nenhuma mudança de schema. Carregamento passa a custar ~40 leituras (tamanho da página) em vez de 500-950. Limitação aceita: a busca por nome é case-sensitive (prefixo), então cadastros novos devem manter o padrão em CAIXA ALTA já usado nos dados importados pra busca funcionar bem.
+- Como testar: Abrir Almoxarifado Saúde, confirmar que a lista carrega só uma leva de itens (com "Carregar mais" no fim), buscar por nome, filtrar por localização, e alternar "só estoque baixo"/"só vencendo" e ver a lista trocar pro modo de alerta.
+- Como reverter: Voltar `GET /itens` pra buscar a categoria inteira sem paginação, e `app.js` pro carregamento único com filtro em memória (versão anterior a este commit).
+
+### [2026-07-21] Novo módulo: Almoxarifado Saúde (Gestão Saúde)
+- Autor: Claude Code
+- Branch: main
+- Arquivos criados:
+  - `/src/rotas/almoxarifado-saude.js` (API sobre as coleções `almoxarifado_itens`, `almoxarifado_lotes` e `almoxarifado_movimentacoes` — já existentes no Firestore, importadas previamente de um levantamento físico de patrimônio e consumíveis de ~21 salas/laboratórios do setor de Saúde, mas sem nenhum módulo até então. CRUD de itens; para `categoria: "Consumível"`, entrada/saída transacional por lote com validade opcional (FEFO) e alerta de vencendo/vencido; para `categoria: "Permanente"` (patrimônio), ajuste direto de quantidade via conferência, sem lote/motivo. Endpoint de stats com contagens agregadas via `count()` do Firestore, evitando varrer os 1500+ itens a cada carregamento)
+  - `/saude/almoxarifado-saude/index.html`, `app.js`, `almoxarifado-saude.css` (Duas abas — Consumíveis e Patrimônio — com resumo, busca, filtro por localização/estoque baixo/vencimento; modal de novo/editar item; modal de movimentação com lotes e histórico para Consumível; modal de conferência simples para Patrimônio)
+- Arquivos alterados:
+  - `/core/permissions.js` (Módulo `almoxarifado-saude` na categoria Gestão Saúde, atribuído a ADM N1/N2)
+  - `/src/middlewares/auth.js` (Permissões padrão: ADM N2 = 3; TI, RH e Visitante = 1, mesmo padrão do Almoxarifado Feridas)
+  - `/api/index.js` (Registro da rota)
+  - `/firestore.indexes.json` (2 índices compostos novos — `almoxarifado_itens` por `categoria`+`nome` e `almoxarifado_movimentacoes` por `itemId`+`realizadoEm` — já publicados em produção via `firebase deploy --only firestore:indexes`)
+  - Nota: `/usuarios/app.js` já deriva a lista de módulos gerenciáveis direto de `core/permissions.js` — nenhuma alteração necessária ali.
+- Tipo: Novo Módulo
+- Motivo: Os dados de patrimônio (equipamentos por laboratório) e consumíveis (materiais por sala, com conferência periódica) do setor de Saúde já haviam sido importados para o Firestore a partir de uma planilha/documento de levantamento físico, mas não existia tela nem API para gerenciá-los.
+- Impacto: Nenhuma coleção nova — o módulo passa a operar sobre dados já existentes (`almoxarifado_itens`: 1520 itens; `almoxarifado_lotes`: 1434 lotes, todos sem validade definida até aqui). A lista de localizações é fixa no backend (`LOCALIZACOES`), batendo com os valores já usados nos dados importados. Limite de "vencendo" fixado em 60 dias (constante `DIAS_VENCENDO`, ajustável só no código por ora).
+- Como testar: Acessar Almoxarifado Saúde → aba Consumíveis, cadastrar item novo com quantidade inicial e validade, dar entrada (lote novo e lote existente) e saída (escolhendo o lote), conferir que o resumo (estoque baixo/vencendo/vencidos) atualiza; na aba Patrimônio, cadastrar item e usar "Conferir" para ajustar a quantidade contada; excluir um item de teste em cada aba e confirmar que lotes/movimentações somem junto.
+- Como reverter: Remover a pasta `/saude/almoxarifado-saude`, a rota `/src/rotas/almoxarifado-saude.js`, o registro em `/api/index.js`, as referências em `/core/permissions.js` e `/src/middlewares/auth.js`, e os 2 índices compostos em `/firestore.indexes.json` (também removê-los do console do Firebase, já que índices publicados não são revertidos automaticamente).
+
 ### [2026-07-17] Novo módulo: Almoxarifado Feridas (Gestão Saúde)
 - Autor: Claude Code
 - Branch: main
